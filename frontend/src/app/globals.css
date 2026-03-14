@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+/* ─── Voltaire Design System — Dieter Rams inspired ─── */
+:root {
+  --bg: #fafafa;
+  --bg-2: #f4f4f4;
+  --bg-3: #ebebeb;
+  --border: #e0e0e0;
+  --border-strong: #c8c8c8;
+  --text-primary: #111111;
+  --text-secondary: #555555;
+  --text-muted: #999999;
+  --accent: #1a1a1a;
+  --accent-hover: #333333;
+  --green: #1a7a3f;
+  --green-bg: #f0faf4;
+  --red: #9b1c1c;
+  --red-bg: #fff5f5;
+  --blue: #1e3a5f;
+  --blue-bg: #f0f4fa;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+    Arial, sans-serif;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+}
+
+/* Tabular numbers everywhere in financial data */
+.tabnum {
+  font-feature-settings: "tnum" 1;
+}
+
+/* Hairline dividers */
+.divider {
+  border-top: 1px solid var(--border);
+}
+
+/* Card */
+.card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
