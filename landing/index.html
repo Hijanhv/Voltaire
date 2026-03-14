@@ -1,0 +1,2446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voltaire — On-Chain European Options AMM</title>
+  <meta name="description" content="The first options AMM where volatility is a live fact. European options priced via on-chain Black-Scholes, powered by Reactive Network cross-chain vol index on Uniswap V4." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── CSS Custom Properties ─────────────────────────────────────────── */
+    :root {
+      --bg:        #07070f;
+      --bg-2:      #0d0d1a;
+      --bg-card:   rgba(13, 13, 26, 0.8);
+      --gold:      #f59e0b;
+      --gold-dim:  rgba(245, 158, 11, 0.15);
+      --gold-glow: rgba(245, 158, 11, 0.4);
+      --indigo:    #6366f1;
+      --indigo-dim:rgba(99, 102, 241, 0.15);
+      --cyan:      #22d3ee;
+      --green:     #10b981;
+      --red:       #f43f5e;
+      --text:      #f8fafc;
+      --muted:     #94a3b8;
+      --border:    rgba(148, 163, 184, 0.1);
+      --border-gold: rgba(245, 158, 11, 0.3);
+      --font-head: 'Space Grotesk', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Reset & Base ───────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.6;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Grain texture overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.4;
+    }
+
+    /* ── Animated Background Blobs ─────────────────────────────────────── */
+    .blobs {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.18;
+    }
+    .blob-1 {
+      width: 700px; height: 700px;
+      background: radial-gradient(circle, var(--gold) 0%, transparent 70%);
+      top: -200px; left: -150px;
+      animation: blob-float-1 18s ease-in-out infinite;
+    }
+    .blob-2 {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, var(--indigo) 0%, transparent 70%);
+      bottom: -100px; right: -100px;
+      animation: blob-float-2 22s ease-in-out infinite;
+    }
+    .blob-3 {
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, var(--cyan) 0%, transparent 70%);
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      animation: blob-float-3 28s ease-in-out infinite;
+      opacity: 0.08;
+    }
+
+    @keyframes blob-float-1 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33%       { transform: translate(60px, 40px) scale(1.08); }
+      66%       { transform: translate(-30px, 70px) scale(0.95); }
+    }
+    @keyframes blob-float-2 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      40%       { transform: translate(-80px, -50px) scale(1.1); }
+      70%       { transform: translate(40px, -80px) scale(0.92); }
+    }
+    @keyframes blob-float-3 {
+      0%, 100% { transform: translate(-50%, -50%) scale(1); }
+      50%       { transform: translate(-50%, -50%) scale(1.3); }
+    }
+
+    /* ── Ticker Strip ───────────────────────────────────────────────────── */
+    .ticker-strip {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      height: 32px;
+      background: rgba(7, 7, 15, 0.95);
+      border-bottom: 1px solid var(--border-gold);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+    }
+    .ticker-track {
+      display: flex;
+      animation: ticker-scroll 40s linear infinite;
+      white-space: nowrap;
+    }
+    .ticker-track:hover { animation-play-state: paused; }
+    .ticker-item {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+      padding: 0 24px;
+      letter-spacing: 0.05em;
+    }
+    .ticker-item .label { color: var(--gold); }
+    .ticker-item .up    { color: var(--green); }
+    .ticker-item .down  { color: var(--red); }
+    .ticker-item .dot   { color: var(--border); margin: 0 8px; }
+
+    @keyframes ticker-scroll {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    /* ── Navbar ─────────────────────────────────────────────────────────── */
+    .navbar {
+      position: fixed;
+      top: 32px;
+      left: 0;
+      right: 0;
+      z-index: 999;
+      padding: 0 40px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(7, 7, 15, 0.75);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.3s;
+    }
+    .nav-logo {
+      font-family: var(--font-head);
+      font-weight: 700;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .nav-logo .bolt { color: var(--gold); }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+    .nav-links a {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.2s;
+      letter-spacing: 0.01em;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .btn-launch {
+      font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 600;
+      padding: 8px 20px;
+      background: var(--gold);
+      color: #07070f;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: opacity 0.2s, transform 0.2s;
+      letter-spacing: 0.02em;
+    }
+    .btn-launch:hover { opacity: 0.88; transform: translateY(-1px); }
+
+    /* ── Main Layout ────────────────────────────────────────────────────── */
+    main { position: relative; z-index: 1; }
+    section { position: relative; }
+
+    /* ── Hero ───────────────────────────────────────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      padding: 160px 40px 100px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Bell curve SVG background */
+    .hero-bg-svg {
+      position: absolute;
+      bottom: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 900px;
+      max-width: 100%;
+      opacity: 0.06;
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 16px;
+      border-radius: 100px;
+      border: 1px solid var(--border-gold);
+      background: var(--gold-dim);
+      color: var(--gold);
+      margin-bottom: 28px;
+      letter-spacing: 0.06em;
+      animation: badge-pulse 3s ease-in-out infinite;
+    }
+    .badge-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: dot-pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes badge-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 var(--gold-dim); }
+      50%       { box-shadow: 0 0 0 6px transparent; }
+    }
+    @keyframes dot-pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .hero h1 {
+      font-family: var(--font-head);
+      font-size: clamp(40px, 6vw, 80px);
+      font-weight: 700;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      margin-bottom: 24px;
+      max-width: 900px;
+    }
+    .hero h1 .static-word { color: var(--text); }
+    .hero h1 .cycling-wrapper {
+      display: inline-block;
+      position: relative;
+      color: var(--gold);
+      min-width: 1.5em;
+    }
+    .cycling-word {
+      display: inline-block;
+      position: absolute;
+      left: 0;
+      top: 0;
+      opacity: 0;
+      transform: translateY(20px);
+      animation: word-cycle 9s ease-in-out infinite;
+    }
+    .cycling-word:nth-child(1) { animation-delay: 0s; }
+    .cycling-word:nth-child(2) { animation-delay: 3s; }
+    .cycling-word:nth-child(3) { animation-delay: 6s; }
+    /* Spacer keeps the line height stable */
+    .cycling-spacer { visibility: hidden; }
+
+    @keyframes word-cycle {
+      0%   { opacity: 0; transform: translateY(20px); }
+      8%   { opacity: 1; transform: translateY(0); }
+      28%  { opacity: 1; transform: translateY(0); }
+      36%  { opacity: 0; transform: translateY(-20px); }
+      100% { opacity: 0; transform: translateY(-20px); }
+    }
+
+    .hero h1 .vol-word {
+      background: linear-gradient(135deg, var(--gold) 0%, var(--indigo) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-subtitle {
+      font-size: clamp(16px, 2vw, 20px);
+      color: var(--muted);
+      max-width: 680px;
+      margin: 0 auto 48px;
+      line-height: 1.7;
+      font-weight: 400;
+    }
+
+    /* Stats row */
+    .hero-stats {
+      display: flex;
+      gap: 48px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 48px;
+    }
+    .hero-stat {
+      text-align: center;
+    }
+    .hero-stat .value {
+      font-family: var(--font-head);
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text);
+      line-height: 1;
+      display: block;
+    }
+    .hero-stat .label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-top: 6px;
+      display: block;
+    }
+    .stat-divider {
+      width: 1px;
+      height: 40px;
+      background: var(--border);
+      align-self: center;
+    }
+
+    /* CTA buttons */
+    .hero-ctas {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn-primary {
+      font-family: var(--font-head);
+      font-size: 15px;
+      font-weight: 600;
+      padding: 14px 32px;
+      background: var(--gold);
+      color: #07070f;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      letter-spacing: 0.01em;
+    }
+    .btn-primary:hover { opacity: 0.88; transform: translateY(-2px); box-shadow: 0 8px 32px var(--gold-glow); }
+
+    .btn-secondary {
+      font-family: var(--font-head);
+      font-size: 15px;
+      font-weight: 600;
+      padding: 14px 32px;
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      letter-spacing: 0.01em;
+    }
+    .btn-secondary:hover { border-color: var(--gold); color: var(--gold); transform: translateY(-2px); }
+
+    /* ── Marquee ────────────────────────────────────────────────────────── */
+    .marquee-section {
+      padding: 40px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+      position: relative;
+    }
+    .marquee-section::before,
+    .marquee-section::after {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 120px;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .marquee-section::before { left: 0; background: linear-gradient(to right, var(--bg), transparent); }
+    .marquee-section::after  { right: 0; background: linear-gradient(to left, var(--bg), transparent); }
+
+    .marquee-track {
+      display: flex;
+      animation: marquee-scroll 30s linear infinite;
+      width: max-content;
+    }
+    .marquee-track:hover { animation-play-state: paused; }
+
+    .marquee-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 40px;
+      font-family: var(--font-head);
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--muted);
+      transition: color 0.3s;
+      cursor: default;
+      white-space: nowrap;
+    }
+    .marquee-item:hover { color: var(--text); }
+    .marquee-item .m-icon { font-size: 18px; opacity: 0.7; }
+
+    @keyframes marquee-scroll {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    /* ── Section Commons ────────────────────────────────────────────────── */
+    .section-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 40px;
+    }
+    .section-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      color: var(--gold);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-family: var(--font-head);
+      font-size: clamp(28px, 4vw, 48px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 16px;
+    }
+    .section-sub {
+      font-size: 17px;
+      color: var(--muted);
+      max-width: 600px;
+      line-height: 1.7;
+      margin-bottom: 64px;
+    }
+
+    /* ── Architecture Section ───────────────────────────────────────────── */
+    .arch-section {
+      padding: 100px 0;
+      background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 50%, var(--bg) 100%);
+    }
+    .arch-section .section-title { text-align: center; }
+    .arch-section .section-sub   { margin: 0 auto 64px; text-align: center; }
+
+    .arch-diagram {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 56px 40px;
+      position: relative;
+      overflow: hidden;
+    }
+    .arch-diagram::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 0%, var(--indigo-dim) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .arch-flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr) 40px repeat(3, 1fr);
+      gap: 0;
+      align-items: center;
+    }
+
+    .arch-chains {
+      grid-column: 1 / 5;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .chain-node {
+      background: rgba(99,102,241,0.12);
+      border: 1px solid rgba(99,102,241,0.3);
+      border-radius: 12px;
+      padding: 16px 12px;
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--indigo);
+      letter-spacing: 0.05em;
+      position: relative;
+    }
+    .chain-node .chain-label {
+      display: block;
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 4px;
+      font-weight: 400;
+    }
+    .chain-node .chain-weight {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 10px;
+      background: rgba(99,102,241,0.2);
+      border-radius: 4px;
+      padding: 2px 6px;
+      color: var(--cyan);
+    }
+    .chain-node::after {
+      content: '';
+      position: absolute;
+      bottom: -30px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2px;
+      height: 30px;
+      background: linear-gradient(to bottom, var(--indigo), transparent);
+    }
+
+    /* The big arrow connector */
+    .arch-arrow-col {
+      grid-column: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .arch-arrow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .arch-contracts {
+      grid-column: 6 / 10;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* Animated flow line between chains block and reactive block */
+    .arch-row {
+      display: grid;
+      grid-template-columns: 1fr 120px 1fr;
+      gap: 0;
+      align-items: center;
+      margin-bottom: 0;
+    }
+
+    .arch-tier {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 40px;
+    }
+    .arch-tier-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    .flow-arrow-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 0;
+      position: relative;
+    }
+    .flow-line {
+      height: 2px;
+      flex: 1;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      position: relative;
+      overflow: visible;
+    }
+    .flow-line::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      right: 0;
+      transform: translateY(-50%);
+      width: 6px;
+      height: 6px;
+      background: var(--gold);
+      border-radius: 50%;
+      animation: flow-pulse 2s ease-in-out infinite;
+    }
+    @keyframes flow-pulse {
+      0%   { box-shadow: 0 0 0 0 var(--gold-glow); }
+      70%  { box-shadow: 0 0 0 8px transparent; }
+      100% { box-shadow: 0 0 0 0 transparent; }
+    }
+
+    /* Simplified arch layout */
+    .arch-visual {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .arch-row-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 10px;
+    }
+    .arch-nodes {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .node-box {
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      position: relative;
+      flex: 1;
+      min-width: 120px;
+      text-align: center;
+    }
+    .node-box .node-sub {
+      display: block;
+      font-size: 10px;
+      font-weight: 400;
+      margin-top: 4px;
+      opacity: 0.7;
+    }
+    .node-chain {
+      background: rgba(99,102,241,0.12);
+      border: 1px solid rgba(99,102,241,0.35);
+      color: var(--indigo);
+    }
+    .node-reactive {
+      background: rgba(34,211,238,0.1);
+      border: 1px solid rgba(34,211,238,0.35);
+      color: var(--cyan);
+      flex: none;
+      width: 100%;
+    }
+    .node-contract {
+      background: rgba(245,158,11,0.08);
+      border: 1px solid rgba(245,158,11,0.25);
+      color: var(--gold);
+    }
+    .node-output {
+      background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.35);
+      color: var(--green);
+    }
+
+    .arch-arrow-down {
+      text-align: center;
+      font-size: 24px;
+      color: var(--muted);
+      padding: 4px 0;
+      position: relative;
+    }
+    .arch-arrow-down::before {
+      content: '';
+      display: block;
+      width: 2px;
+      height: 20px;
+      background: linear-gradient(to bottom, var(--indigo), var(--gold));
+      margin: 0 auto 4px;
+      animation: flow-down 2s ease-in-out infinite;
+    }
+    @keyframes flow-down {
+      0%   { opacity: 0.3; }
+      50%  { opacity: 1; }
+      100% { opacity: 0.3; }
+    }
+
+    /* ── Bento Grid ─────────────────────────────────────────────────────── */
+    .features-section {
+      padding: 100px 0;
+    }
+    .bento-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: auto auto;
+      gap: 16px;
+    }
+    .bento-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      position: relative;
+      overflow: hidden;
+      cursor: default;
+      transition: border-color 0.3s;
+    }
+    .bento-card:hover { border-color: rgba(245,158,11,0.2); }
+    .bento-card.wide { grid-column: span 2; }
+    .bento-card.gold-accent {
+      border-color: var(--border-gold);
+      background: linear-gradient(135deg, rgba(245,158,11,0.05) 0%, var(--bg-card) 60%);
+    }
+
+    /* Spotlight effect via JS */
+    .bento-card .spotlight {
+      position: absolute;
+      inset: 0;
+      border-radius: 16px;
+      opacity: 0;
+      transition: opacity 0.4s;
+      pointer-events: none;
+    }
+    .bento-card:hover .spotlight { opacity: 1; }
+
+    .card-icon {
+      font-size: 28px;
+      margin-bottom: 16px;
+      display: block;
+    }
+    .card-title {
+      font-family: var(--font-head);
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+      color: var(--text);
+    }
+    .card-desc {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .card-tag {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 100px;
+      background: var(--gold-dim);
+      color: var(--gold);
+      border: 1px solid var(--border-gold);
+      margin-bottom: 14px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .card-code {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--cyan);
+      background: rgba(34,211,238,0.06);
+      border: 1px solid rgba(34,211,238,0.15);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-top: 14px;
+      display: block;
+    }
+
+    /* ── x402 Agent Interface Section ──────────────────────────────────── */
+    .agent-section {
+      padding: 100px 0;
+      background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 50%, var(--bg) 100%);
+    }
+    .agent-section .section-label { text-align: center; display: block; }
+    .agent-section .section-title { text-align: center; }
+    .agent-section .section-sub   { margin: 0 auto 64px; text-align: center; }
+
+    .section-title-gradient {
+      background: linear-gradient(135deg, var(--gold) 0%, #fbbf24 50%, var(--indigo) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .agent-layout {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 32px;
+      align-items: start;
+    }
+
+    /* Terminal */
+    .terminal {
+      background: #050509;
+      border: 1px solid rgba(34,211,238,0.2);
+      border-radius: 14px;
+      overflow: hidden;
+      font-family: var(--font-mono);
+      box-shadow: 0 0 40px rgba(34,211,238,0.05);
+    }
+    .terminal-header {
+      background: rgba(34,211,238,0.06);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid rgba(34,211,238,0.1);
+    }
+    .term-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+    }
+    .term-dot-r { background: #f43f5e; }
+    .term-dot-y { background: var(--gold); }
+    .term-dot-g { background: var(--green); }
+    .terminal-title {
+      font-size: 12px;
+      color: var(--muted);
+      margin-left: 8px;
+      letter-spacing: 0.04em;
+    }
+    .terminal-body {
+      padding: 24px;
+      min-height: 480px;
+      font-size: 12.5px;
+      line-height: 1.8;
+    }
+    .term-line {
+      display: block;
+      opacity: 0;
+      animation: term-appear 0.2s forwards;
+    }
+    .term-line.active { opacity: 1; }
+    @keyframes term-appear {
+      to { opacity: 1; }
+    }
+    .t-prompt  { color: var(--cyan); }
+    .t-cmd     { color: var(--text); }
+    .t-resp    { color: var(--muted); padding-left: 20px; }
+    .t-resp.success { color: var(--green); padding-left: 20px; }
+    .t-resp.warn    { color: var(--gold); padding-left: 20px; }
+    .t-blank   { display: block; height: 12px; opacity: 1; }
+    .t-section { color: var(--gold); font-weight: 600; }
+    .t-comment { color: #4a5568; }
+    .t-key     { color: var(--indigo); }
+    .t-val     { color: var(--green); }
+    .t-num     { color: var(--cyan); }
+    .t-highlight { color: var(--gold); font-weight: 600; }
+
+    /* Use case cards */
+    .use-cases {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .use-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      transition: border-color 0.3s, transform 0.2s;
+    }
+    .use-card:hover { border-color: var(--border-gold); transform: translateX(4px); }
+    .use-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .use-icon {
+      font-size: 22px;
+    }
+    .use-title {
+      font-family: var(--font-head);
+      font-weight: 600;
+      font-size: 15px;
+    }
+    .use-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+    .use-badge {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-top: 10px;
+    }
+    .badge-green { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .badge-indigo { background: rgba(99,102,241,0.15); color: var(--indigo); border: 1px solid rgba(99,102,241,0.3); }
+    .badge-gold { background: var(--gold-dim); color: var(--gold); border: 1px solid var(--border-gold); }
+
+    /* ── Option Chain ───────────────────────────────────────────────────── */
+    .chain-section {
+      padding: 100px 0;
+    }
+    .chain-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .live-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--green);
+    }
+    .live-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: dot-pulse 1.5s ease-in-out infinite;
+    }
+
+    .options-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    .options-table thead th {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    .options-table tbody tr {
+      border-bottom: 1px solid rgba(148,163,184,0.05);
+      transition: background 0.2s;
+      cursor: default;
+    }
+    .options-table tbody tr:hover {
+      background: rgba(255,255,255,0.02);
+    }
+    .options-table tbody tr.hot {
+      animation: row-pulse 3s ease-in-out infinite;
+    }
+    @keyframes row-pulse {
+      0%, 100% { background: transparent; }
+      50%       { background: rgba(245,158,11,0.04); }
+    }
+    .options-table td {
+      padding: 14px 16px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      vertical-align: middle;
+    }
+    .ticker-code { color: var(--text); font-weight: 600; }
+    .badge-call { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); border-radius: 6px; padding: 2px 10px; font-size: 11px; font-weight: 600; font-family: var(--font-mono); }
+    .badge-put  { background: rgba(244,63,94,0.15); color: var(--red); border: 1px solid rgba(244,63,94,0.3); border-radius: 6px; padding: 2px 10px; font-size: 11px; font-weight: 600; font-family: var(--font-mono); }
+    .col-premium { color: var(--gold); }
+    .col-oi      { color: var(--text); }
+    .col-expiry  { color: var(--muted); }
+    .col-iv      { color: var(--cyan); }
+    .table-wrap {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .table-footer {
+      padding: 14px 16px;
+      font-size: 12px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      font-family: var(--font-mono);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* ── CTA Section ────────────────────────────────────────────────────── */
+    .cta-section {
+      padding: 120px 0;
+      text-align: center;
+      overflow: hidden;
+    }
+
+    .orbit-ring {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      margin: 0 auto 48px;
+    }
+    .orbit-svg {
+      animation: orbit-spin 20s linear infinite;
+    }
+    @keyframes orbit-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .orbit-center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+    }
+
+    .cta-section .section-title { margin-bottom: 16px; }
+    .cta-section .section-sub   { margin: 0 auto 40px; }
+    .cta-buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* ── Footer ─────────────────────────────────────────────────────────── */
+    footer {
+      padding: 40px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: gap;
+      gap: 16px;
+    }
+    .footer-left {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .footer-left .brand {
+      font-family: var(--font-head);
+      font-weight: 700;
+      color: var(--text);
+    }
+    .footer-links {
+      display: flex;
+      gap: 24px;
+    }
+    .footer-links a {
+      font-size: 13px;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .footer-links a:hover { color: var(--gold); }
+
+    /* ── Responsive ─────────────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .navbar { padding: 0 20px; }
+      .nav-links { display: none; }
+      .hero { padding: 120px 24px 80px; }
+      .hero-stats { gap: 24px; }
+      .stat-divider { display: none; }
+      .section-inner { padding: 0 24px; }
+      .bento-grid { grid-template-columns: 1fr; }
+      .bento-card.wide { grid-column: span 1; }
+      .agent-layout { grid-template-columns: 1fr; }
+      .arch-nodes { flex-direction: column; }
+      footer { flex-direction: column; text-align: center; }
+    }
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 36px; }
+      .options-table td, .options-table thead th { padding: 10px 10px; font-size: 12px; }
+    }
+
+    /* ── Reduced Motion ─────────────────────────────────────────────────── */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* Selection */
+    ::selection { background: var(--gold-dim); color: var(--gold); }
+
+    /* ── Wallet Button ──────────────────────────────────────────────────── */
+    .btn-wallet {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 16px; border-radius: 8px; cursor: pointer;
+      border: 1px solid var(--border-gold); background: var(--gold-dim);
+      color: var(--gold); font-family: var(--font-mono); font-size: 12px;
+      font-weight: 500; letter-spacing: 0.04em;
+      transition: background 0.2s, border-color 0.2s; white-space: nowrap;
+    }
+    .btn-wallet:hover { background: rgba(245,158,11,0.22); border-color: var(--gold); }
+    .btn-wallet.connected { border-color: var(--green); background: rgba(16,185,129,0.1); color: var(--green); }
+    .wallet-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .btn-github-nav {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 8px; cursor: pointer;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); font-size: 12px; font-family: var(--font-mono);
+      transition: color 0.2s, border-color 0.2s; white-space: nowrap; text-decoration: none;
+    }
+    .btn-github-nav:hover { color: var(--text); border-color: var(--muted); }
+    .nav-actions { display: flex; align-items: center; gap: 10px; }
+
+    /* ── Interactive Pricer ─────────────────────────────────────────────── */
+    .pricer-section { padding: 100px 0; position: relative; z-index: 1; }
+    .pricer-container {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 20px; overflow: hidden; backdrop-filter: blur(20px);
+    }
+    .pricer-header {
+      padding: 24px 32px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    }
+    .pricer-hd-left h3 { font-family: var(--font-head); font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+    .pricer-hd-left p  { font-size: 11px; color: var(--muted); font-family: var(--font-mono); margin-top: 3px; }
+    .pricer-live-badge {
+      display: flex; align-items: center; gap: 6px; font-size: 11px;
+      font-family: var(--font-mono); color: var(--green);
+      border: 1px solid rgba(16,185,129,0.25); border-radius: 6px; padding: 6px 12px;
+    }
+    .pricer-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .pricer-body { display: grid; grid-template-columns: 1fr 1fr; }
+    @media(max-width:860px){ .pricer-body { grid-template-columns: 1fr; } }
+    .pricer-inputs {
+      padding: 28px 32px; border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 20px;
+    }
+    .pricer-input-group { display: flex; flex-direction: column; gap: 8px; }
+    .pricer-label {
+      font-size: 11px; font-family: var(--font-mono); color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      display: flex; justify-content: space-between;
+    }
+    .pricer-label .pv { color: var(--text); font-weight: 500; }
+    .pricer-slider {
+      -webkit-appearance: none; width: 100%; height: 3px; border-radius: 2px;
+      background: var(--border); outline: none; cursor: pointer;
+    }
+    .pricer-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+      background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+      box-shadow: 0 0 8px var(--gold-glow);
+    }
+    .pricer-select {
+      background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+      color: var(--text); font-family: var(--font-mono); font-size: 13px;
+      padding: 10px 14px; border-radius: 8px; cursor: pointer; width: 100%; outline: none;
+    }
+    .pricer-select:focus { border-color: var(--gold); }
+    .pricer-type-toggle { display: flex; gap: 8px; }
+    .pricer-type-btn {
+      flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 8px;
+      background: transparent; color: var(--muted); font-family: var(--font-mono);
+      font-size: 12px; cursor: pointer; transition: all 0.15s; font-weight: 600; letter-spacing: 0.06em;
+    }
+    .pricer-type-btn.active-call { border-color: var(--green); background: rgba(16,185,129,0.1); color: var(--green); }
+    .pricer-type-btn.active-put  { border-color: var(--red);   background: rgba(244,63,94,0.1);  color: var(--red); }
+    .formula-box {
+      background: rgba(99,102,241,0.05); border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 8px; padding: 14px 16px; font-family: var(--font-mono);
+      font-size: 11px; color: var(--muted); line-height: 2.1;
+    }
+    .formula-box .fv { color: var(--indigo); font-weight: 600; }
+    .pricer-outputs { padding: 28px 32px; display: flex; flex-direction: column; gap: 18px; }
+    .price-card { border-radius: 12px; padding: 20px 22px; border: 1px solid; }
+    .price-card-call { background: rgba(16,185,129,0.05); border-color: rgba(16,185,129,0.2); }
+    .price-card-put  { background: rgba(244,63,94,0.05);  border-color: rgba(244,63,94,0.2); }
+    .price-card-lbl { font-size: 10px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+    .price-card-val { font-size: 36px; font-weight: 700; font-family: var(--font-head); letter-spacing: -0.03em; line-height: 1; margin-bottom: 18px; font-variant-numeric: tabular-nums; }
+    .price-card-call .price-card-val { color: var(--green); }
+    .price-card-put  .price-card-val { color: var(--red); }
+    .greeks-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .greek-item { background: rgba(255,255,255,0.025); border-radius: 6px; padding: 8px 10px; border: 1px solid var(--border); }
+    .greek-name { font-size: 9px; font-family: var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+    .greek-val  { font-size: 13px; font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+    .canvas-wrap { border-radius: 10px; overflow: hidden; background: rgba(0,0,0,0.25); border: 1px solid var(--border); }
+    .canvas-wrap canvas { display: block; width: 100%; height: auto; }
+    .canvas-label { font-size: 10px; font-family: var(--font-mono); color: var(--muted); text-align: center; padding: 6px 8px; letter-spacing: 0.04em; }
+
+    /* ── Networks ────────────────────────────────────────────────────────── */
+    .networks-section { padding: 100px 0; position: relative; z-index: 1; }
+    .networks-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 56px; }
+    @media(max-width:900px){ .networks-grid { grid-template-columns: repeat(2,1fr); } }
+    @media(max-width:580px){ .networks-grid { grid-template-columns: 1fr; } }
+    .network-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 24px; transition: transform 0.2s, border-color 0.2s; backdrop-filter: blur(10px);
+    }
+    .network-card:hover { transform: translateY(-3px); }
+    .network-card.card-eth      { border-color: rgba(98,126,234,0.25); }
+    .network-card.card-arb      { border-color: rgba(40,160,240,0.25); }
+    .network-card.card-base     { border-color: rgba(0,82,255,0.25); }
+    .network-card.card-bsc      { border-color: rgba(243,186,47,0.25); }
+    .network-card.card-unichain { border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.03); }
+    .network-card.card-reactive { border-color: rgba(99,102,241,0.3); background: rgba(99,102,241,0.03); }
+    .network-name { font-family: var(--font-head); font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+    .network-role { font-size: 10px; font-family: var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+    .net-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; }
+    .net-key { font-size: 11px; color: var(--muted); }
+    .net-val { font-size: 12px; font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+    .net-vol-bar { height: 3px; border-radius: 2px; background: rgba(255,255,255,0.05); margin: 12px 0 10px; }
+    .net-vol-fill { height: 100%; border-radius: 2px; transition: width 0.8s cubic-bezier(0.34,1.56,0.64,1); }
+    .net-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-family: var(--font-mono); padding: 3px 8px; border-radius: 4px; letter-spacing: 0.04em; }
+    .net-badge-src  { background: rgba(99,102,241,0.1); color: var(--indigo); border: 1px solid rgba(99,102,241,0.2); }
+    .net-badge-dep  { background: rgba(245,158,11,0.1); color: var(--gold);   border: 1px solid rgba(245,158,11,0.2); }
+    .net-badge-agg  { background: rgba(34,211,238,0.1);  color: var(--cyan);   border: 1px solid rgba(34,211,238,0.2); }
+
+    /* ── Protocol Safety ─────────────────────────────────────────────────── */
+    .safety-section { padding: 100px 0; position: relative; z-index: 1; }
+    .safety-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 56px; }
+    @media(max-width:700px){ .safety-grid { grid-template-columns: 1fr; } }
+    .safety-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 28px; backdrop-filter: blur(10px); transition: border-color 0.2s;
+    }
+    .safety-card:hover { border-color: rgba(245,158,11,0.3); }
+    .safety-icon { font-size: 26px; margin-bottom: 14px; display: block; }
+    .safety-title { font-family: var(--font-head); font-size: 16px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 8px; }
+    .safety-desc { font-size: 13px; color: var(--muted); line-height: 1.7; margin-bottom: 14px; }
+    .safety-code {
+      font-family: var(--font-mono); font-size: 11px; line-height: 1.9;
+      background: rgba(0,0,0,0.35); border: 1px solid rgba(148,163,184,0.08);
+      border-radius: 8px; padding: 12px 14px; color: var(--cyan);
+    }
+    .safety-code .sc-kw  { color: var(--indigo); }
+    .safety-code .sc-str { color: var(--gold); }
+    .safety-code .sc-cmt { color: rgba(148,163,184,0.5); }
+  </style>
+</head>
+<body>
+
+<!-- ── Animated Background Blobs ─────────────────────────────────────────── -->
+<div class="blobs" aria-hidden="true">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+</div>
+
+<!-- ── Ticker Strip ───────────────────────────────────────────────────────── -->
+<div class="ticker-strip" aria-label="Live market data">
+  <div class="ticker-track" id="ticker-track">
+    <!-- duplicated for seamless loop -->
+  </div>
+</div>
+
+<!-- ── Navbar ─────────────────────────────────────────────────────────────── -->
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <a href="#hero" class="nav-logo"><span class="bolt">⚡</span> VOLTAIRE</a>
+  <ul class="nav-links">
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#pricer">Pricer</a></li>
+    <li><a href="#networks">Networks</a></li>
+    <li><a href="#agent">Agent Interface</a></li>
+  </ul>
+  <div class="nav-actions">
+    <a href="https://github.com/Hijanhv/Voltaire" class="btn-github-nav" target="_blank" rel="noopener" aria-label="View source on GitHub">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+    <button class="btn-wallet" id="btn-wallet" aria-label="Connect wallet">
+      <span class="wallet-dot"></span> Connect Wallet
+    </button>
+    <a href="http://localhost:3002" class="btn-launch" id="btn-launch-app">Launch App</a>
+  </div>
+</nav>
+
+<!-- ── Hero ──────────────────────────────────────────────────────────────── -->
+<section class="hero" id="hero">
+  <!-- Bell curve background SVG -->
+  <svg class="hero-bg-svg" viewBox="0 0 900 300" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M0 280 C 50 280, 100 280, 150 278 C 200 276, 230 270, 260 255 C 290 240, 310 215, 330 190 C 350 165, 365 140, 380 115 C 393 92, 405 60, 420 35 C 435 10, 445 3, 450 2 C 455 3, 465 10, 480 35 C 495 60, 507 92, 520 115 C 535 140, 550 165, 570 190 C 590 215, 610 240, 640 255 C 670 270, 700 276, 750 278 C 800 280, 850 280, 900 280" stroke="url(#bell-grad)" stroke-width="2.5" stroke-linecap="round"/>
+    <defs>
+      <linearGradient id="bell-grad" x1="0" y1="0" x2="900" y2="0" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stop-color="#6366f1" stop-opacity="0"/>
+        <stop offset="30%" stop-color="#6366f1"/>
+        <stop offset="50%" stop-color="#f59e0b"/>
+        <stop offset="70%" stop-color="#6366f1"/>
+        <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <div class="hero-badge" aria-label="Status: V4 Hook Ready on Unichain">
+    <span class="badge-dot" aria-hidden="true"></span>
+    &gt; V4_HOOK_READY: UNICHAIN
+  </div>
+
+  <h1>
+    <span class="static-word">The </span><span class="cycling-wrapper" aria-label="first" style="min-width:1em">
+      <span class="cycling-word">first</span>
+      <span class="cycling-word">only</span>
+      <span class="cycling-word">last</span>
+      <span class="cycling-spacer" aria-hidden="true">first</span>
+    </span><span class="static-word"> options AMM<br>where <span class="vol-word">volatility</span> is a live fact.</span>
+  </h1>
+
+  <p class="hero-subtitle">
+    European call and put options priced on-chain via Black-Scholes, volatility sourced
+    from a four-chain realized vol index computed by Reactive Network.
+  </p>
+
+  <div class="hero-stats" role="list" aria-label="Protocol statistics">
+    <div class="hero-stat" role="listitem">
+      <span class="value" data-target="4.28" data-prefix="$" data-suffix="M" data-decimals="2">$0.00M</span>
+      <span class="label">Vault TVL</span>
+    </div>
+    <div class="stat-divider" aria-hidden="true"></div>
+    <div class="hero-stat" role="listitem">
+      <span class="value" data-target="72.0" data-suffix="%" data-decimals="1">0.0%</span>
+      <span class="label">Vol Index</span>
+    </div>
+    <div class="stat-divider" aria-hidden="true"></div>
+    <div class="hero-stat" role="listitem">
+      <span class="value" data-target="3531" data-suffix="" data-decimals="0">0</span>
+      <span class="label">Open Interest</span>
+    </div>
+    <div class="stat-divider" aria-hidden="true"></div>
+    <div class="hero-stat" role="listitem">
+      <span class="value" data-target="17.3" data-suffix="%" data-decimals="1">0.0%</span>
+      <span class="label">Vault APY</span>
+    </div>
+  </div>
+
+  <div class="hero-ctas">
+    <a href="http://localhost:3002/buy" class="btn-primary" id="btn-trade">Trade Options →</a>
+    <a href="http://localhost:3002/vault" class="btn-secondary" id="btn-vault">Deploy Vault →</a>
+    <a href="https://github.com/Hijanhv/Voltaire" class="btn-secondary" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      View Source
+    </a>
+  </div>
+</section>
+
+<!-- ── Interactive Option Pricer ───────────────────────────────────────────── -->
+<section class="pricer-section" id="pricer">
+  <div class="section-inner">
+    <p class="section-label" style="text-align:center;">// LIVE OPTION PRICER</p>
+    <h2 class="section-title" style="text-align:center;">Same math as the contract.<br><span style="color:var(--muted);font-weight:400;font-size:0.65em;font-family:var(--font-mono);">BlackScholes.sol runs this exact algorithm — WAD-equivalent precision</span></h2>
+
+    <div class="pricer-container" style="margin-top:48px;">
+      <div class="pricer-header">
+        <div class="pricer-hd-left">
+          <h3>Black-Scholes Option Pricer</h3>
+          <p>Abramowitz &amp; Stegun N(x) · matches on-chain Solidity output · all greeks computed</p>
+        </div>
+        <div class="pricer-live-badge">
+          <span class="pricer-live-dot"></span>
+          REAL-TIME · CLIENT-SIDE
+        </div>
+      </div>
+
+      <div class="pricer-body">
+        <!-- ── Inputs ── -->
+        <div class="pricer-inputs">
+          <div class="pricer-input-group">
+            <label class="pricer-label" for="spot-slider">Spot Price <span class="pv" id="spot-disp">$3,247.82</span></label>
+            <input type="range" class="pricer-slider" id="spot-slider" min="2000" max="5000" step="1" value="3248">
+          </div>
+          <div class="pricer-input-group">
+            <label class="pricer-label" for="strike-select">Strike Price <span class="pv" id="strike-disp">$3,400</span></label>
+            <select class="pricer-select" id="strike-select">
+              <option value="2800">$2,800  (deep ITM put / deep OTM call)</option>
+              <option value="3000">$3,000</option>
+              <option value="3200">$3,200  (slight ITM call)</option>
+              <option value="3400" selected>$3,400  (slight OTM call)</option>
+              <option value="3600">$3,600</option>
+              <option value="3800">$3,800</option>
+              <option value="4000">$4,000  (deep OTM call)</option>
+              <option value="4500">$4,500</option>
+            </select>
+          </div>
+          <div class="pricer-input-group">
+            <label class="pricer-label" for="vol-slider">Volatility σ (annualized) <span class="pv" id="vol-disp">72.0%</span></label>
+            <input type="range" class="pricer-slider" id="vol-slider" min="10" max="200" step="1" value="72">
+          </div>
+          <div class="pricer-input-group">
+            <label class="pricer-label" for="dte-slider">Days to Expiry <span class="pv" id="dte-disp">14d</span></label>
+            <input type="range" class="pricer-slider" id="dte-slider" min="1" max="90" step="1" value="14">
+          </div>
+          <div class="pricer-input-group">
+            <div class="pricer-label" style="margin-bottom:6px;">Option Type</div>
+            <div class="pricer-type-toggle">
+              <button class="pricer-type-btn active-call" id="btn-type-call" onclick="pricerSetType('call')">▲ CALL</button>
+              <button class="pricer-type-btn" id="btn-type-put" onclick="pricerSetType('put')">▼ PUT</button>
+            </div>
+          </div>
+          <!-- Live d1/d2 formula -->
+          <div class="formula-box" id="formula-box" aria-label="Black-Scholes formula values">
+            d₁ = (ln(S/K) + σ²T/2) / σ√T &nbsp;= <span class="fv" id="d1-val">—</span><br>
+            d₂ = d₁ − σ√T &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= <span class="fv" id="d2-val">—</span><br>
+            C  = S·N(d₁) − K·N(d₂) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= <span class="fv" id="formula-c">—</span><br>
+            P  = K·N(−d₂) − S·N(−d₁) &nbsp;&nbsp;&nbsp;= <span class="fv" id="formula-p">—</span>
+          </div>
+        </div>
+
+        <!-- ── Outputs ── -->
+        <div class="pricer-outputs">
+          <div class="price-card price-card-call" id="price-card">
+            <div class="price-card-lbl" id="price-card-lbl">CALL PREMIUM</div>
+            <div class="price-card-val" id="price-val">$—</div>
+            <div class="greeks-grid">
+              <div class="greek-item"><div class="greek-name">δ Delta</div><div class="greek-val" id="g-delta">—</div></div>
+              <div class="greek-item"><div class="greek-name">γ Gamma</div><div class="greek-val" id="g-gamma">—</div></div>
+              <div class="greek-item"><div class="greek-name">θ Theta / day</div><div class="greek-val" id="g-theta">—</div></div>
+              <div class="greek-item"><div class="greek-name">ν Vega / 1% vol</div><div class="greek-val" id="g-vega">—</div></div>
+            </div>
+          </div>
+          <!-- Payoff diagram -->
+          <div class="canvas-wrap">
+            <canvas id="payoff-canvas" width="600" height="220" aria-label="Option payoff at expiry diagram"></canvas>
+            <div class="canvas-label">PAYOFF AT EXPIRY  ·  Long Position  ·  Break-even marked</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Logo Marquee ───────────────────────────────────────────────────────── -->
+<div class="marquee-section" aria-label="Ecosystem partners" role="complementary">
+  <div class="marquee-track" id="marquee-track"></div>
+</div>
+
+<!-- ── Architecture ───────────────────────────────────────────────────────── -->
+<section class="arch-section" id="architecture">
+  <div class="section-inner">
+    <p class="section-label" style="text-align:center;">// SYSTEM ARCHITECTURE</p>
+    <h2 class="section-title" style="text-align:center;">Four Chains. One Vol Index.<br>Zero Oracles.</h2>
+    <p class="section-sub" style="text-align:center;margin:0 auto 64px;">Reactive Network aggregates realized volatility from 288 samples per chain per day, producing a weighted cross-chain vol index that feeds directly into on-chain Black-Scholes pricing.</p>
+
+    <div class="arch-diagram">
+      <div class="arch-visual">
+
+        <!-- Tier 1: Input chains -->
+        <div>
+          <p class="arch-row-label">// DATA SOURCES — 288 TWAP SAMPLES/CHAIN/DAY</p>
+          <div class="arch-nodes">
+            <div class="node-box node-chain">
+              ⬡ ETHEREUM
+              <span class="node-sub">35% weight</span>
+            </div>
+            <div class="node-box node-chain">
+              ⬡ ARBITRUM
+              <span class="node-sub">30% weight</span>
+            </div>
+            <div class="node-box node-chain">
+              ⬡ BASE
+              <span class="node-sub">20% weight</span>
+            </div>
+            <div class="node-box node-chain">
+              ⬡ BSC
+              <span class="node-sub">15% weight</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Arrow -->
+        <div class="arch-arrow-down" aria-hidden="true">
+          <svg width="24" height="32" viewBox="0 0 24 32" fill="none">
+            <line x1="12" y1="0" x2="12" y2="24" stroke="url(#arr-grad)" stroke-width="2"/>
+            <polyline points="6,18 12,26 18,18" stroke="#f59e0b" stroke-width="2" fill="none"/>
+            <defs>
+              <linearGradient id="arr-grad" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+                <stop offset="0%" stop-color="#6366f1"/>
+                <stop offset="100%" stop-color="#f59e0b"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+
+        <!-- Tier 2: Reactive Network -->
+        <div>
+          <p class="arch-row-label">// REACTIVE NETWORK — CROSS-CHAIN COMPUTATION + CRON SETTLEMENT</p>
+          <div class="arch-nodes">
+            <div class="node-box node-reactive">
+              ⚡ REACTIVE NETWORK
+              <span class="node-sub">Aggregates vol · Pushes oracle · Triggers settlement at expiry</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Arrow -->
+        <div class="arch-arrow-down" aria-hidden="true">
+          <svg width="24" height="32" viewBox="0 0 24 32" fill="none">
+            <line x1="12" y1="0" x2="12" y2="24" stroke="url(#arr-grad2)" stroke-width="2"/>
+            <polyline points="6,18 12,26 18,18" stroke="#f59e0b" stroke-width="2" fill="none"/>
+            <defs>
+              <linearGradient id="arr-grad2" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+                <stop offset="0%" stop-color="#22d3ee"/>
+                <stop offset="100%" stop-color="#f59e0b"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+
+        <!-- Tier 3: Unichain contracts -->
+        <div>
+          <p class="arch-row-label">// UNICHAIN PROTOCOL LAYER</p>
+          <div class="arch-nodes">
+            <div class="node-box node-contract">
+              VolatilityOracle.sol
+              <span class="node-sub">Staleness guard: &lt;1h</span>
+            </div>
+            <div class="node-box node-contract" style="background:rgba(99,102,241,0.08);border-color:rgba(99,102,241,0.25);color:var(--indigo);">
+              BlackScholes.sol
+              <span class="node-sub">WAD fixed-point, A&amp;S N(x)</span>
+            </div>
+            <div class="node-box node-contract">
+              OptionsHook.sol
+              <span class="node-sub">beforeSwap intercept</span>
+            </div>
+            <div class="node-box node-contract" style="background:rgba(34,211,238,0.08);border-color:rgba(34,211,238,0.2);color:var(--cyan);">
+              CollateralVault.sol
+              <span class="node-sub">USDC, 17.3% APY</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Arrow -->
+        <div class="arch-arrow-down" aria-hidden="true">
+          <svg width="24" height="32" viewBox="0 0 24 32" fill="none">
+            <line x1="12" y1="0" x2="12" y2="24" stroke="url(#arr-grad3)" stroke-width="2"/>
+            <polyline points="6,18 12,26 18,18" stroke="#10b981" stroke-width="2" fill="none"/>
+            <defs>
+              <linearGradient id="arr-grad3" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+                <stop offset="0%" stop-color="#f59e0b"/>
+                <stop offset="100%" stop-color="#10b981"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+
+        <!-- Tier 4: Output -->
+        <div>
+          <p class="arch-row-label">// TRADER RECEIVES</p>
+          <div class="arch-nodes">
+            <div class="node-box node-output">
+              ERC20 OptionToken
+              <span class="node-sub">e.g. ETH-3400-MAR26-C · Tradeable · Settles automatically at expiry</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /arch-visual -->
+    </div><!-- /arch-diagram -->
+  </div>
+</section>
+
+<!-- ── Networks ────────────────────────────────────────────────────────────── -->
+<section class="networks-section" id="networks">
+  <div class="section-inner">
+    <p class="section-label" style="text-align:center;">// SUPPORTED NETWORKS</p>
+    <h2 class="section-title" style="text-align:center;">Every chain contributes.<br>Nothing is trusted blindly.</h2>
+    <p class="section-sub" style="text-align:center;margin:0 auto 0;">Vol data from 4 independent chains, each weighted by depth. Aggregated by Reactive Network. Deployed on Unichain.</p>
+
+    <div class="networks-grid">
+      <div class="network-card card-eth">
+        <div class="network-name">⬡ Ethereum</div>
+        <div class="network-role">Vol Data Source · 35% weight</div>
+        <div class="net-row"><span class="net-key">Realized vol</span><span class="net-val" style="color:var(--cyan)">71.0%</span></div>
+        <div class="net-row"><span class="net-key">Samples / day</span><span class="net-val">288</span></div>
+        <div class="net-row"><span class="net-key">Sample interval</span><span class="net-val">5 min TWAP</span></div>
+        <div class="net-vol-bar"><div class="net-vol-fill" style="width:71%;background:var(--indigo)"></div></div>
+        <span class="net-badge net-badge-src">◈ DATA SOURCE</span>
+      </div>
+
+      <div class="network-card card-arb">
+        <div class="network-name">⬡ Arbitrum</div>
+        <div class="network-role">Vol Data Source · 30% weight</div>
+        <div class="net-row"><span class="net-key">Realized vol</span><span class="net-val" style="color:var(--cyan)">74.0%</span></div>
+        <div class="net-row"><span class="net-key">Samples / day</span><span class="net-val">288</span></div>
+        <div class="net-row"><span class="net-key">Sample interval</span><span class="net-val">5 min TWAP</span></div>
+        <div class="net-vol-bar"><div class="net-vol-fill" style="width:74%;background:#38bdf8"></div></div>
+        <span class="net-badge net-badge-src">◈ DATA SOURCE</span>
+      </div>
+
+      <div class="network-card card-base">
+        <div class="network-name">⬡ Base</div>
+        <div class="network-role">Vol Data Source · 20% weight</div>
+        <div class="net-row"><span class="net-key">Realized vol</span><span class="net-val" style="color:var(--cyan)">70.0%</span></div>
+        <div class="net-row"><span class="net-key">Samples / day</span><span class="net-val">288</span></div>
+        <div class="net-row"><span class="net-key">Sample interval</span><span class="net-val">5 min TWAP</span></div>
+        <div class="net-vol-bar"><div class="net-vol-fill" style="width:70%;background:#2563eb"></div></div>
+        <span class="net-badge net-badge-src">◈ DATA SOURCE</span>
+      </div>
+
+      <div class="network-card card-bsc">
+        <div class="network-name">⬡ BNB Chain</div>
+        <div class="network-role">Vol Data Source · 15% weight</div>
+        <div class="net-row"><span class="net-key">Realized vol</span><span class="net-val" style="color:var(--cyan)">73.0%</span></div>
+        <div class="net-row"><span class="net-key">Samples / day</span><span class="net-val">288</span></div>
+        <div class="net-row"><span class="net-key">Sample interval</span><span class="net-val">5 min TWAP</span></div>
+        <div class="net-vol-bar"><div class="net-vol-fill" style="width:73%;background:#f3ba2f"></div></div>
+        <span class="net-badge net-badge-src">◈ DATA SOURCE</span>
+      </div>
+
+      <div class="network-card card-unichain">
+        <div class="network-name">⚡ Unichain</div>
+        <div class="network-role">Deployment Chain</div>
+        <div class="net-row"><span class="net-key">Chain ID</span><span class="net-val">1301</span></div>
+        <div class="net-row"><span class="net-key">Hook permissions</span><span class="net-val" style="color:var(--gold)">0x88 (beforeSwap + returnDelta)</span></div>
+        <div class="net-row"><span class="net-key">Pool Manager</span><span class="net-val" style="font-size:10px;color:var(--muted)">0x1F98...F984</span></div>
+        <div class="net-row"><span class="net-key">MEV Tax</span><span class="net-val" style="color:var(--green)">Active — arb value → protocol</span></div>
+        <span class="net-badge net-badge-dep" style="margin-top:12px;">⚡ DEPLOYMENT</span>
+      </div>
+
+      <div class="network-card card-reactive">
+        <div class="network-name">◈ Reactive Network</div>
+        <div class="network-role">Aggregator + Cron Settlement</div>
+        <div class="net-row"><span class="net-key">Role</span><span class="net-val" style="color:var(--indigo)">Vol oracle push + cron</span></div>
+        <div class="net-row"><span class="net-key">Push frequency</span><span class="net-val">Every block</span></div>
+        <div class="net-row"><span class="net-key">Staleness guard</span><span class="net-val" style="color:var(--gold)">&lt; 1 hour or revert</span></div>
+        <div class="net-row"><span class="net-key">Keepers needed</span><span class="net-val" style="color:var(--green)">Zero</span></div>
+        <span class="net-badge net-badge-agg" style="margin-top:12px;">◈ AGGREGATOR</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Features Bento Grid ─────────────────────────────────────────────────── -->
+<section class="features-section" id="features">
+  <div class="section-inner">
+    <p class="section-label">// PROTOCOL FEATURES</p>
+    <h2 class="section-title">Every layer,<br>purpose-built.</h2>
+    <p class="section-sub">Six contracts, ~3000 lines of Solidity. Every piece designed to eliminate the weaknesses of existing on-chain options protocols.</p>
+
+    <div class="bento-grid" id="bento-grid">
+
+      <!-- Card 1: Black-Scholes (wide) -->
+      <div class="bento-card wide">
+        <div class="spotlight" aria-hidden="true"></div>
+        <span class="card-icon" aria-hidden="true">∫</span>
+        <span class="card-tag">BlackScholes.sol</span>
+        <h3 class="card-title">On-Chain Black-Scholes</h3>
+        <p class="card-desc">Premium computed in pure Solidity using WAD (1e18) fixed-point arithmetic. Abramowitz &amp; Stegun polynomial approximation for N(x) CDF, accurate to 1e-7. No external price oracles — all math is on-chain and deterministic.</p>
+        <code class="card-code">
+          uint256 d1 = (lnSK + vol2t/2) / volSqrtT; // WAD arithmetic<br>
+          call = spot * N(d1) - strike * N(d2);      // C = S·N(d1) - K·N(d2)
+        </code>
+      </div>
+
+      <!-- Card 2: 4-Chain Vol -->
+      <div class="bento-card">
+        <div class="spotlight" aria-hidden="true"></div>
+        <span class="card-icon" aria-hidden="true">◈</span>
+        <span class="card-tag">VolatilityOracle.sol</span>
+        <h3 class="card-title">4-Chain Vol Index</h3>
+        <p class="card-desc">Reactive Network aggregates realized vol from 288 samples/day per chain. Ethereum (35%), Arbitrum (30%), Base (20%), BSC (15%). Staleness protection: reverts if older than 1 hour.</p>
+      </div>
+
+      <!-- Card 3: V4 Hook -->
+      <div class="bento-card">
+        <div class="spotlight" aria-hidden="true"></div>
+        <span class="card-icon" aria-hidden="true">⇄</span>
+        <span class="card-tag">OptionsHook.sol</span>
+        <h3 class="card-title">Uniswap V4 Hook</h3>
+        <p class="card-desc">Trades execute through Uniswap V4 <code style="font-family:var(--font-mono);font-size:12px;color:var(--cyan)">beforeSwap</code> hook. hookData encodes strike, expiry, call/put, quantity. BeforeSwapDelta collects premium in the same transaction.</p>
+      </div>
+
+      <!-- Card 4: Settlement -->
+      <div class="bento-card">
+        <div class="spotlight" aria-hidden="true"></div>
+        <span class="card-icon" aria-hidden="true">⏱</span>
+        <span class="card-tag">Reactive Cron</span>
+        <h3 class="card-title">Automated Settlement</h3>
+        <p class="card-desc">Reactive Network cron calls <code style="font-family:var(--font-mono);font-size:12px;color:var(--cyan)">settleExpiredSeries()</code> at expiry. ITM holders call <code style="font-family:var(--font-mono);font-size:12px;color:var(--cyan)">claimSettlement()</code> to receive USDC payout. Zero keepers. Zero infrastructure.</p>
+      </div>
+
+      <!-- Card 5: Vault -->
+      <div class="bento-card">
+        <div class="spotlight" aria-hidden="true"></div>
+        <span class="card-icon" aria-hidden="true">⬡</span>
+        <span class="card-tag">CollateralVault.sol</span>
+        <h3 class="card-title">Collateral Vault</h3>
+        <p class="card-desc">USDC vault with share-based accounting. Writers earn 17.3% APY from option premiums. Utilization tracking prevents over-leverage. Premiums increase NAV-per-share passively.</p>
+      </div>
+
+      <!-- Card 6: x402 Agent Access (wide, gold accent) -->
+      <div class="bento-card wide gold-accent" id="x402-card">
+        <div class="spotlight" aria-hidden="true"></div>
+        <span class="card-icon" aria-hidden="true">🤖</span>
+        <span class="card-tag" style="background:var(--gold-dim);color:var(--gold);border-color:var(--gold);">x402 · AGENT INFRASTRUCTURE</span>
+        <h3 class="card-title">x402 Agent Access</h3>
+        <p class="card-desc">AI agents autonomously purchase options via HTTP 402 micropayments — the "Stripe for machines" protocol. No accounts. No API keys. Agent pays USDC premium via x402 response, receives ERC20 option token. Treasury hedging, directional exposure, vol arbitrage — fully autonomous.</p>
+        <code class="card-code" style="margin-top:16px;">
+          GET /api/v1/options/quote?asset=ETH&amp;strike=3400 → HTTP 402 Payment Required<br>
+          X-Payment-Amount: 142.30 USDC → OptionsHook mints ETH-3400-MAR26-C to agent
+        </code>
+      </div>
+
+    </div><!-- /bento-grid -->
+  </div>
+</section>
+
+<!-- ── Circuit Breakers & Protocol Safety ──────────────────────────────────── -->
+<section class="safety-section" id="safety">
+  <div class="section-inner">
+    <p class="section-label" style="text-align:center;">// CIRCUIT BREAKERS &amp; SAFETY MECHANISMS</p>
+    <h2 class="section-title" style="text-align:center;">Adversarial design.<br>Every edge case is closed.</h2>
+    <p class="section-sub" style="text-align:center;margin:0 auto 0;">Four independent safety layers prevent stale-price exploits, oracle spoofing, vault insolvency, and unauthorized hook deployment.</p>
+
+    <div class="safety-grid">
+      <div class="safety-card">
+        <span class="safety-icon">⏱</span>
+        <div class="safety-title">Vol Staleness Hard-Revert</div>
+        <p class="safety-desc">The moment <code style="font-family:var(--font-mono);font-size:12px;color:var(--cyan)">VolatilityOracle.getVolatility()</code> is called, it checks the timestamp. If the last push is older than 1 hour, the entire transaction reverts. A stale vol feed would let arb bots extract risk-free value from mispriced options — this makes that impossible.</p>
+        <div class="safety-code">
+          <span class="sc-kw">require</span>(<br>
+          &nbsp;&nbsp;block.timestamp <span class="sc-kw">-</span> lastUpdated <span class="sc-kw">&lt;</span> <span class="sc-str">1 hours</span>,<br>
+          &nbsp;&nbsp;<span class="sc-str">"VOL_STALE"</span><br>
+          ); <span class="sc-cmt">// VolatilityOracle.sol</span>
+        </div>
+      </div>
+
+      <div class="safety-card">
+        <span class="safety-icon">⬡</span>
+        <div class="safety-title">Collateral Utilization Cap</div>
+        <p class="safety-desc">Before every option sale, <code style="font-family:var(--font-mono);font-size:12px;color:var(--cyan)">OptionsHook</code> queries available vault liquidity. If the locked collateral ratio would be breached, the trade reverts. The vault is always solvent: every ITM payout is pre-funded in USDC at the moment of sale.</p>
+        <div class="safety-code">
+          <span class="sc-kw">require</span>(<br>
+          &nbsp;&nbsp;vault.availableLiquidity(USDC) <span class="sc-kw">&gt;=</span> notional,<br>
+          &nbsp;&nbsp;<span class="sc-str">"INSUFFICIENT_COLLATERAL"</span><br>
+          ); <span class="sc-cmt">// OptionsHook.sol</span>
+        </div>
+      </div>
+
+      <div class="safety-card">
+        <span class="safety-icon">🔑</span>
+        <div class="safety-title">Authorized Oracle Role</div>
+        <p class="safety-desc">Volatility writes are gated behind the <code style="font-family:var(--font-mono);font-size:12px;color:var(--cyan)">reactiveRelayer</code> address set at deploy time. Only the Reactive Network relayer can push vol data — no one else can manipulate the vol index, regardless of gas or MEV.</p>
+        <div class="safety-code">
+          <span class="sc-kw">require</span>(<br>
+          &nbsp;&nbsp;msg.sender <span class="sc-kw">==</span> reactiveRelayer,<br>
+          &nbsp;&nbsp;<span class="sc-str">"NOT_RELAYER"</span><br>
+          ); <span class="sc-cmt">// VolatilityOracle.sol</span>
+        </div>
+      </div>
+
+      <div class="safety-card">
+        <span class="safety-icon">⇄</span>
+        <div class="safety-title">Hook Permission Bits</div>
+        <p class="safety-desc">The Uniswap V4 Pool Manager validates hook permissions by inspecting the hook's address. Voltaire uses bitmask <code style="font-family:var(--font-mono);font-size:12px;color:var(--gold)">0x88</code>: <code style="font-family:var(--font-mono);font-size:12px;color:var(--cyan)">beforeSwap=true</code> and <code style="font-family:var(--font-mono);font-size:12px;color:var(--cyan)">beforeSwapReturnDelta=true</code>. Any deployment to an address encoding extra permissions reverts at the pool level — no privilege escalation possible.</p>
+        <div class="safety-code">
+          Hooks.Permissions({<br>
+          &nbsp;&nbsp;<span class="sc-kw">beforeSwap:</span>            <span class="sc-str">true</span>,<br>
+          &nbsp;&nbsp;<span class="sc-kw">beforeSwapReturnDelta:</span> <span class="sc-str">true</span>,<br>
+          &nbsp;&nbsp;<span class="sc-cmt">// all others: false → 0x88</span><br>
+          })
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── x402 Agent Interface ────────────────────────────────────────────────── -->
+<section class="agent-section" id="agent">
+  <div class="section-inner">
+    <span class="section-label">&gt; [SYS_MSG]: DIRECTIVE FOR AUTONOMOUS AGENTS</span>
+    <h2 class="section-title" style="text-align:center;margin-top:12px;">
+      <span class="section-title-gradient">MACHINE INTERFACE // x402</span>
+    </h2>
+    <p class="section-sub" style="text-align:center;margin:12px auto 64px;">
+      Your agent can autonomously hedge on-chain positions. No accounts. No API keys.<br>Pay in USDC, receive an option.
+    </p>
+
+    <div class="agent-layout">
+
+      <!-- Terminal -->
+      <div class="terminal" role="region" aria-label="x402 agent terminal interface">
+        <div class="terminal-header">
+          <span class="term-dot term-dot-r"></span>
+          <span class="term-dot term-dot-y"></span>
+          <span class="term-dot term-dot-g"></span>
+          <span class="terminal-title">voltaire-agent-interface — x402</span>
+        </div>
+        <div class="terminal-body" id="terminal-body">
+          <!-- Lines injected by JS -->
+        </div>
+      </div>
+
+      <!-- Use cases -->
+      <div class="use-cases">
+        <div class="use-card">
+          <div class="use-card-header">
+            <span class="use-icon" aria-hidden="true">🏦</span>
+            <span class="use-title">Treasury Hedge</span>
+          </div>
+          <p class="use-desc">Agent holds ETH in treasury. Buys put options autonomously to cap downside below a target price. Pays premium in USDC, receives put token. Settlement is fully automated at expiry.</p>
+          <span class="use-badge badge-green">BUY ETH-3000-MAR26-P · PUTS · PROTECTION</span>
+        </div>
+        <div class="use-card">
+          <div class="use-card-header">
+            <span class="use-icon" aria-hidden="true">📈</span>
+            <span class="use-title">Directional Bet</span>
+          </div>
+          <p class="use-desc">Agent wants ETH upside without capital exposure of holding spot. Buys call options with minimal premium. Leveraged upside, bounded downside — ideal for yield-farming bots redeploying idle capital.</p>
+          <span class="use-badge badge-indigo">BUY ETH-3400-MAR26-C · CALLS · UPSIDE</span>
+        </div>
+        <div class="use-card">
+          <div class="use-card-header">
+            <span class="use-icon" aria-hidden="true">⚡</span>
+            <span class="use-title">Vol Arbitrage</span>
+          </div>
+          <p class="use-desc">Agent captures the spread between implied vol (from Voltaire pricing) and realized vol (from Reactive Network). Systematic vol selling or buying based on vol regime detection — no human required.</p>
+          <span class="use-badge badge-gold">VOL INDEX 72% · IMPLIED vs REALIZED</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Option Chain ────────────────────────────────────────────────────────── -->
+<section class="chain-section" id="chain">
+  <div class="section-inner">
+    <div class="chain-header">
+      <div>
+        <p class="section-label" style="margin-bottom:8px;">// OPTION CHAIN</p>
+        <h2 class="section-title" style="margin-bottom:0;">Live Option Chain — ETH/USDC</h2>
+      </div>
+      <div class="live-indicator" aria-label="Live data feed">
+        <span class="live-dot" aria-hidden="true"></span>
+        LIVE · ETH $3,247.82
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="options-table" role="table" aria-label="ETH/USDC option chain">
+        <thead>
+          <tr>
+            <th>TICKER</th>
+            <th>TYPE</th>
+            <th>STRIKE</th>
+            <th>PREMIUM</th>
+            <th>OI</th>
+            <th>IV</th>
+            <th>EXPIRY</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="hot">
+            <td><span class="ticker-code">ETH-3200-MAR26-C</span></td>
+            <td><span class="badge-call">CALL</span></td>
+            <td>$3,200</td>
+            <td class="col-premium">$142.30</td>
+            <td class="col-oi">1,204</td>
+            <td class="col-iv">74.2%</td>
+            <td class="col-expiry">28 Mar 2026</td>
+          </tr>
+          <tr>
+            <td><span class="ticker-code">ETH-3400-MAR26-C</span></td>
+            <td><span class="badge-call">CALL</span></td>
+            <td>$3,400</td>
+            <td class="col-premium">$68.50</td>
+            <td class="col-oi">842</td>
+            <td class="col-iv">71.8%</td>
+            <td class="col-expiry">28 Mar 2026</td>
+          </tr>
+          <tr>
+            <td><span class="ticker-code">ETH-3000-MAR26-P</span></td>
+            <td><span class="badge-put">PUT</span></td>
+            <td>$3,000</td>
+            <td class="col-premium">$54.20</td>
+            <td class="col-oi">677</td>
+            <td class="col-iv">76.1%</td>
+            <td class="col-expiry">28 Mar 2026</td>
+          </tr>
+          <tr>
+            <td><span class="ticker-code">ETH-3500-APR26-C</span></td>
+            <td><span class="badge-call">CALL</span></td>
+            <td>$3,500</td>
+            <td class="col-premium">$112.80</td>
+            <td class="col-oi">509</td>
+            <td class="col-iv">69.4%</td>
+            <td class="col-expiry">25 Apr 2026</td>
+          </tr>
+          <tr>
+            <td><span class="ticker-code">ETH-2800-APR26-P</span></td>
+            <td><span class="badge-put">PUT</span></td>
+            <td>$2,800</td>
+            <td class="col-premium">$38.90</td>
+            <td class="col-oi">299</td>
+            <td class="col-iv">78.5%</td>
+            <td class="col-expiry">25 Apr 2026</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="table-footer">
+        <span>VOL INDEX: <strong style="color:var(--cyan)">72.0%</strong> · 4-chain weighted · Updated 8s ago</span>
+        <span>Powered by Reactive Network × Uniswap V4</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ────────────────────────────────────────────────────────────────── -->
+<section class="cta-section">
+  <div class="section-inner">
+
+    <!-- Orbiting text ring -->
+    <div class="orbit-ring" aria-hidden="true">
+      <svg class="orbit-svg" width="200" height="200" viewBox="0 0 200 200">
+        <defs>
+          <path id="orbitPath" d="M 100,100 m -75,0 a 75,75 0 1,1 150,0 a 75,75 0 1,1 -150,0"/>
+        </defs>
+        <circle cx="100" cy="100" r="75" fill="none" stroke="var(--border)" stroke-width="1" stroke-dasharray="4 6"/>
+        <text font-family="'JetBrains Mono', monospace" font-size="10.5" font-weight="600" fill="var(--muted)" letter-spacing="3.8">
+          <textPath href="#orbitPath">HEDGE • TRADE • EARN • DEPLOY • AUTOMATE • SETTLE •</textPath>
+        </text>
+      </svg>
+      <div class="orbit-center">⚡</div>
+    </div>
+
+    <h2 class="section-title">Ready to trade<br>on-chain options?</h2>
+    <p class="section-sub" style="margin:0 auto 40px;">
+      Voltaire is deployed on Unichain. Deposit USDC to earn yield as an option writer,
+      or trade calls and puts directly through Uniswap V4.
+    </p>
+    <div class="cta-buttons">
+      <a href="http://localhost:3002" class="btn-primary" id="btn-cta-app">Launch Trading App</a>
+      <a href="https://github.com/Hijanhv/Voltaire#readme" class="btn-secondary" target="_blank" rel="noopener">Read Docs</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ─────────────────────────────────────────────────────────────── -->
+<footer role="contentinfo">
+  <div class="footer-left">
+    <span class="brand">⚡ Voltaire Protocol</span><br>
+    <span>© 2026 · Built on Unichain · Powered by Reactive Network · Hooks by Uniswap V4</span>
+  </div>
+  <nav class="footer-links" aria-label="Footer links">
+    <a href="https://github.com/Hijanhv/Voltaire" target="_blank" rel="noopener">GitHub</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#agent">Agent Interface</a>
+    <a href="https://github.com/Hijanhv/Voltaire#readme" target="_blank" rel="noopener">Docs</a>
+  </nav>
+</footer>
+
+<script>
+/* ── App URL Config — UPDATE THIS when deploying ──────────────────────────── */
+/* When you deploy the Next.js app (e.g. to Vercel), replace the value below   */
+/* with your production URL, e.g. 'https://voltaire-app.vercel.app'            */
+const APP_URL = 'http://localhost:3002';
+const GITHUB_URL = 'https://github.com/Hijanhv/Voltaire';
+
+(function wireLinks() {
+  const map = {
+    'btn-launch-app': APP_URL,
+    'btn-trade':      APP_URL + '/buy',
+    'btn-vault':      APP_URL + '/vault',
+    'btn-cta-app':    APP_URL,
+  };
+  Object.entries(map).forEach(([id, url]) => {
+    const el = document.getElementById(id);
+    if (el) el.href = url;
+  });
+})();
+
+/* ── Ticker strip ─────────────────────────────────────────────────────────── */
+(function() {
+  const items = [
+    '<span class="label">ETH</span> $3,247.82 <span class="up">▲0.4%</span>',
+    '<span class="dot">•</span>',
+    '<span class="label">VOL INDEX</span> 72.0%',
+    '<span class="dot">•</span>',
+    '<span class="label">OI</span> 3,531',
+    '<span class="dot">•</span>',
+    '<span class="label">TVL</span> $4.28M',
+    '<span class="dot">•</span>',
+    '<span class="label">ETH-3200-MAR26-C</span> $142.30 <span class="up">▲2.1%</span>',
+    '<span class="dot">•</span>',
+    '<span class="label">ETH-3400-MAR26-C</span> $68.50',
+    '<span class="dot">•</span>',
+    '<span class="label">ETH-3000-MAR26-P</span> $54.20 <span class="down">▼0.8%</span>',
+    '<span class="dot">•</span>',
+    '<span class="label">VAULT APY</span> 17.3%',
+    '<span class="dot">•</span>',
+    '<span class="label">UNICHAIN</span> ONLINE',
+    '<span class="dot">•</span>',
+  ];
+  const track = document.getElementById('ticker-track');
+  // Duplicate for seamless loop
+  const all = [...items, ...items];
+  track.innerHTML = all.map(i => `<span class="ticker-item">${i}</span>`).join('');
+})();
+
+/* ── Logo Marquee ─────────────────────────────────────────────────────────── */
+(function() {
+  const logos = [
+    { icon: '🦄', name: 'Uniswap' },
+    { icon: '⛓', name: 'Unichain' },
+    { icon: '⚡', name: 'Reactive Network' },
+    { icon: '◆', name: 'Ethereum' },
+    { icon: '▲', name: 'Arbitrum' },
+    { icon: '◉', name: 'Base' },
+    { icon: '⬡', name: 'BSC' },
+    { icon: '⚒', name: 'Foundry' },
+    { icon: '🛡', name: 'OpenZeppelin' },
+  ];
+  const track = document.getElementById('marquee-track');
+  const all = [...logos, ...logos];
+  track.innerHTML = all.map(l =>
+    `<div class="marquee-item"><span class="m-icon">${l.icon}</span> ${l.name}</div>`
+  ).join('');
+})();
+
+/* ── Count-up animation (IntersectionObserver) ───────────────────────────── */
+(function() {
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const stats = document.querySelectorAll('.hero-stat .value');
+
+  function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+
+  function animateStat(el) {
+    const target = parseFloat(el.dataset.target);
+    const prefix = el.dataset.prefix || '';
+    const suffix = el.dataset.suffix || '';
+    const decimals = parseInt(el.dataset.decimals || '0');
+    const duration = 1800;
+    const start = performance.now();
+
+    if (prefersReduced) {
+      el.textContent = prefix + target.toFixed(decimals) + suffix;
+      return;
+    }
+
+    function tick(now) {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const current = easeOut(progress) * target;
+      el.textContent = prefix + current.toFixed(decimals) + suffix;
+      if (progress < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        animateStat(entry.target);
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.5 });
+
+  stats.forEach(el => observer.observe(el));
+})();
+
+/* ── Bento spotlight effect ──────────────────────────────────────────────── */
+(function() {
+  const grid = document.getElementById('bento-grid');
+  if (!grid) return;
+  const cards = grid.querySelectorAll('.bento-card');
+
+  cards.forEach(card => {
+    const spotlight = card.querySelector('.spotlight');
+    if (!spotlight) return;
+
+    card.addEventListener('mousemove', (e) => {
+      const rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      spotlight.style.background =
+        `radial-gradient(400px circle at ${x}px ${y}px, rgba(245,158,11,0.08) 0%, transparent 70%)`;
+    });
+
+    card.addEventListener('mouseleave', () => {
+      spotlight.style.background = 'none';
+    });
+  });
+})();
+
+/* ── Terminal typewriter ─────────────────────────────────────────────────── */
+(function() {
+  const body = document.getElementById('terminal-body');
+  if (!body) return;
+
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const lines = [
+    { cls: 't-prompt', html: '&gt; VOLTAIRE_ENDPOINT: <span class="t-val">ONLINE</span>' },
+    { cls: 't-prompt', html: '&gt; PROTOCOL: <span class="t-val">x402 — HTTP_PAYMENT_REQUIRED</span>' },
+    { cls: 't-prompt', html: '&gt; ASSET: <span class="t-val">USDC / UNICHAIN</span>' },
+    { cls: 't-blank' },
+    { cls: 't-section', html: 'ATTENTION AI AGENTS &amp; LLM ROUTERS:' },
+    { cls: 't-blank' },
+    { cls: 't-section', html: '1. REQUEST QUOTE' },
+    { cls: 't-comment', html: '   GET /api/v1/options/quote?asset=ETH' },
+    { cls: 't-comment', html: '       &amp;strike=3400&amp;expiry=2026-03-28&amp;type=call' },
+    { cls: 't-blank' },
+    { cls: 't-resp warn', html: '   ← HTTP <span class="t-highlight">402 Payment Required</span>' },
+    { cls: 't-resp', html: '   ← X-Payment-Scheme: <span class="t-key">exact</span>' },
+    { cls: 't-resp', html: '   ← X-Payment-Asset:  <span class="t-val">USDC</span>' },
+    { cls: 't-resp', html: '   ← X-Payment-Amount: <span class="t-num">142.30</span>' },
+    { cls: 't-resp', html: '   ← X-Payment-To:     <span class="t-key">0x[OptionsHook]</span>' },
+    { cls: 't-blank' },
+    { cls: 't-section', html: '2. PAY PREMIUM' },
+    { cls: 't-resp', html: '   Agent broadcasts USDC transfer →' },
+    { cls: 't-resp success', html: '   OptionsHook.beforeSwap intercepts ✓' },
+    { cls: 't-resp success', html: '   OptionSeries.mint(ETH-3400-MAR26-C, wallet, qty) ✓' },
+    { cls: 't-resp success', html: '   CollateralVault.lockCollateral(strikeNotional) ✓' },
+    { cls: 't-blank' },
+    { cls: 't-section', html: '3. HOLD &amp; SETTLE' },
+    { cls: 't-resp', html: '   Reactive cron → settleExpiredSeries() at expiry' },
+    { cls: 't-resp', html: '   ITM payout = max(spot - 3400, 0) × qty in USDC' },
+    { cls: 't-resp success', html: '   claimSettlement() → burn tokens → receive USDC ✓' },
+    { cls: 't-blank' },
+    { cls: 't-prompt', html: '&gt; TREASURY HEDGING ACTIVE' },
+    { cls: 't-prompt', html: '&gt; <span class="t-val">EOF</span>' },
+  ];
+
+  if (prefersReduced) {
+    lines.forEach(line => {
+      const span = document.createElement('span');
+      span.className = line.cls;
+      span.innerHTML = line.html || '&nbsp;';
+      body.appendChild(span);
+    });
+    return;
+  }
+
+  let i = 0;
+  function addLine() {
+    if (i >= lines.length) return;
+    const line = lines[i++];
+    const span = document.createElement('span');
+    span.className = line.cls;
+    span.innerHTML = line.html || '&nbsp;';
+    span.style.opacity = '0';
+    span.style.transform = 'translateY(4px)';
+    span.style.transition = 'opacity 0.15s, transform 0.15s';
+    body.appendChild(span);
+    requestAnimationFrame(() => {
+      span.style.opacity = '1';
+      span.style.transform = 'translateY(0)';
+    });
+    body.scrollTop = body.scrollHeight;
+    setTimeout(addLine, line.cls === 't-blank' ? 80 : 60);
+  }
+
+  // Start when terminal section is visible
+  const observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) {
+      observer.disconnect();
+      setTimeout(addLine, 400);
+    }
+  }, { threshold: 0.3 });
+  observer.observe(body);
+})();
+
+/* ── Cycling word fix: ensure correct width ──────────────────────────────── */
+(function() {
+  const wrapper = document.querySelector('.cycling-wrapper');
+  if (!wrapper) return;
+})();
+
+/* ── Black-Scholes Pricer ────────────────────────────────────────────────── */
+(function() {
+  // Standard normal CDF — Abramowitz & Stegun approximation (same algorithm as BlackScholes.sol)
+  function normCDF(x) {
+    const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429, p=0.3275911;
+    const sign = x < 0 ? -1 : 1;
+    const ax = Math.abs(x);
+    const t = 1 / (1 + p * ax);
+    const poly = t*(a1+t*(a2+t*(a3+t*(a4+t*a5))));
+    const erf = 1 - poly * Math.exp(-ax*ax);
+    return 0.5 * (1 + sign * erf);
+  }
+
+  function bsCalc(S, K, T, sigma) {
+    if (T <= 0) {
+      return { callP: Math.max(S-K,0), putP: Math.max(K-S,0), d1:0, d2:0,
+               callDelta: S>K?1:0, putDelta: S<K?-1:0, gamma:0, callTheta:0, putTheta:0, vega:0 };
+    }
+    const sqrtT = Math.sqrt(T);
+    const d1 = (Math.log(S/K) + 0.5*sigma*sigma*T) / (sigma*sqrtT);
+    const d2 = d1 - sigma*sqrtT;
+    const Nd1=normCDF(d1), Nd2=normCDF(d2), Nnd1=normCDF(-d1), Nnd2=normCDF(-d2);
+    const npd1 = Math.exp(-0.5*d1*d1) / Math.sqrt(2*Math.PI);
+    const callP = S*Nd1 - K*Nd2;
+    const putP  = K*Nnd2 - S*Nnd1;
+    const callDelta = Nd1;
+    const putDelta  = Nd1 - 1;
+    const gamma = npd1 / (S*sigma*sqrtT);
+    const theta = (-(S*npd1*sigma)/(2*sqrtT)) / 365;  // per calendar day
+    const vega  = S * npd1 * sqrtT / 100;             // per 1% change in vol
+    return { callP, putP, d1, d2, callDelta, putDelta, gamma, theta, vega };
+  }
+
+  let pricerType = 'call';
+
+  window.pricerSetType = function(type) {
+    pricerType = type;
+    const btnCall = document.getElementById('btn-type-call');
+    const btnPut  = document.getElementById('btn-type-put');
+    if (!btnCall || !btnPut) return;
+    btnCall.className = 'pricer-type-btn' + (type==='call' ? ' active-call' : '');
+    btnPut.className  = 'pricer-type-btn' + (type==='put'  ? ' active-put'  : '');
+    updatePricer();
+  };
+
+  function fmt(n, dec) { return n.toFixed(dec !== undefined ? dec : 2); }
+  function fmtUSD(n)   { return '$' + Math.abs(n).toFixed(2); }
+
+  function updatePricer() {
+    const spotEl   = document.getElementById('spot-slider');
+    const strikeEl = document.getElementById('strike-select');
+    const volEl    = document.getElementById('vol-slider');
+    const dteEl    = document.getElementById('dte-slider');
+    if (!spotEl) return;
+
+    const S     = parseFloat(spotEl.value);
+    const K     = parseFloat(strikeEl.value);
+    const volPct= parseFloat(volEl.value);
+    const dte   = parseFloat(dteEl.value);
+    const sigma = volPct / 100;
+    const T     = dte / 365;
+
+    // Update display labels
+    document.getElementById('spot-disp').textContent  = '$' + S.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+    document.getElementById('strike-disp').textContent= '$' + K.toLocaleString();
+    document.getElementById('vol-disp').textContent   = volPct.toFixed(1) + '%';
+    document.getElementById('dte-disp').textContent   = dte + 'd';
+
+    const bs = bsCalc(S, K, T, sigma);
+
+    // Formula display
+    document.getElementById('d1-val').textContent   = fmt(bs.d1, 4);
+    document.getElementById('d2-val').textContent   = fmt(bs.d2, 4);
+    document.getElementById('formula-c').textContent= '$' + fmt(bs.callP);
+    document.getElementById('formula-p').textContent= '$' + fmt(bs.putP);
+
+    // Price card
+    const isCall = pricerType === 'call';
+    const price  = isCall ? bs.callP : bs.putP;
+    const delta  = isCall ? bs.callDelta : bs.putDelta;
+    const card   = document.getElementById('price-card');
+    card.className = 'price-card ' + (isCall ? 'price-card-call' : 'price-card-put');
+    document.getElementById('price-card-lbl').textContent = isCall ? 'CALL PREMIUM' : 'PUT PREMIUM';
+    document.getElementById('price-val').textContent      = '$' + fmt(price);
+    document.getElementById('g-delta').textContent = fmt(delta, 4);
+    document.getElementById('g-gamma').textContent = fmt(bs.gamma, 6);
+    document.getElementById('g-theta').textContent = '-$' + fmt(Math.abs(bs.theta));
+    document.getElementById('g-vega').textContent  = '$' + fmt(bs.vega);
+
+    // Color greek values
+    const dEl = document.getElementById('g-delta');
+    dEl.style.color = delta >= 0 ? 'var(--green)' : 'var(--red)';
+
+    // Draw payoff canvas
+    drawPayoff(S, K, price, isCall);
+  }
+
+  function drawPayoff(S, K, premium, isCall) {
+    const canvas = document.getElementById('payoff-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const sMin = K * 0.58, sMax = K * 1.42;
+    const nPts = 300;
+    const maxPnL = isCall ? (sMax - K - premium) : (K - sMin - premium);
+    const minPnL = -premium * 1.3;
+    const pnlSpan = Math.max(maxPnL - minPnL, premium * 2.2);
+    const pad = { t: 22, b: 22, l: 8, r: 8 };
+    const cW = W - pad.l - pad.r, cH = H - pad.t - pad.b;
+
+    const toX = s  => pad.l + (s  - sMin) / (sMax - sMin) * cW;
+    const toY = pnl => pad.t + cH - ((pnl - minPnL) / pnlSpan) * cH;
+
+    // Subtle grid
+    ctx.strokeStyle = 'rgba(148,163,184,0.06)'; ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = pad.t + (cH / 4) * i;
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    }
+
+    // Zero P&L line
+    const y0 = toY(0);
+    ctx.setLineDash([5, 4]); ctx.strokeStyle = 'rgba(148,163,184,0.2)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, y0); ctx.lineTo(W - pad.r, y0); ctx.stroke();
+
+    // Strike price line
+    const xK = toX(K);
+    ctx.strokeStyle = 'rgba(245,158,11,0.25)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xK, pad.t); ctx.lineTo(xK, H - pad.b); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Current spot line
+    const xS = toX(S);
+    ctx.strokeStyle = 'rgba(99,102,241,0.3)'; ctx.lineWidth = 1; ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(xS, pad.t); ctx.lineTo(xS, H - pad.b); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Build payoff points
+    const pts = [];
+    for (let i = 0; i <= nPts; i++) {
+      const spot = sMin + (sMax - sMin) * i / nPts;
+      const intrinsic = isCall ? Math.max(spot-K, 0) : Math.max(K-spot, 0);
+      pts.push({ x: toX(spot), y: toY(intrinsic - premium) });
+    }
+
+    // Fill profit (green above zero line)
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, y0);
+    pts.forEach(p => ctx.lineTo(p.x, Math.min(p.y, y0)));
+    ctx.lineTo(pts[pts.length-1].x, y0);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(16,185,129,0.1)'; ctx.fill();
+    ctx.restore();
+
+    // Fill loss (red below zero line)
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, y0);
+    pts.forEach(p => ctx.lineTo(p.x, Math.max(p.y, y0)));
+    ctx.lineTo(pts[pts.length-1].x, y0);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(244,63,94,0.08)'; ctx.fill();
+    ctx.restore();
+
+    // Payoff line (gradient)
+    const grad = ctx.createLinearGradient(0, 0, W, 0);
+    grad.addColorStop(0,   isCall ? 'rgba(244,63,94,0.9)' : 'rgba(16,185,129,0.9)');
+    grad.addColorStop(0.5, 'rgba(245,158,11,0.9)');
+    grad.addColorStop(1,   isCall ? 'rgba(16,185,129,0.9)' : 'rgba(244,63,94,0.9)');
+    ctx.beginPath();
+    pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.strokeStyle = grad; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke();
+
+    // Current spot dot
+    const spotIntrinsic = isCall ? Math.max(S-K,0) : Math.max(K-S,0);
+    const yS = toY(spotIntrinsic - premium);
+    ctx.beginPath(); ctx.arc(xS, yS, 5, 0, 2*Math.PI);
+    ctx.fillStyle = '#6366f1'; ctx.fill();
+    ctx.strokeStyle = '#07070f'; ctx.lineWidth = 2; ctx.stroke();
+
+    // Labels
+    const f = (s) => '$' + Math.round(s/100)*100;
+    ctx.font = '10px JetBrains Mono, monospace'; ctx.fillStyle = 'rgba(245,158,11,0.65)';
+    ctx.textAlign = 'center';
+    ctx.fillText('K ' + f(K), Math.min(Math.max(xK, 30), W-30), 13);
+    ctx.fillStyle = 'rgba(99,102,241,0.65)';
+    ctx.fillText('S ' + f(S), Math.min(Math.max(xS, 30), W-30), H - 6);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(16,185,129,0.5)';  ctx.fillText('PROFIT', pad.l + 4, pad.t + 14);
+    ctx.fillStyle = 'rgba(244,63,94,0.5)'; ctx.fillText('LOSS', pad.l + 4, H - pad.b - 6);
+  }
+
+  // Wire all inputs
+  ['spot-slider','vol-slider','dte-slider'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', updatePricer);
+  });
+  const sel = document.getElementById('strike-select');
+  if (sel) sel.addEventListener('change', updatePricer);
+
+  // Initial render (defer until DOM is ready)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', updatePricer);
+  } else {
+    updatePricer();
+  }
+})();
+
+/* ── Connect Wallet (EIP-1193) ───────────────────────────────────────────── */
+(function() {
+  const btn = document.getElementById('btn-wallet');
+  if (!btn) return;
+
+  function truncate(addr) { return addr.slice(0,6) + '…' + addr.slice(-4); }
+
+  function setConnected(addr) {
+    btn.className = 'btn-wallet connected';
+    btn.innerHTML = '<span class="wallet-dot"></span>' + truncate(addr);
+    btn.title = addr;
+  }
+  function setDisconnected() {
+    btn.className = 'btn-wallet';
+    btn.innerHTML = '<span class="wallet-dot"></span> Connect Wallet';
+    btn.title = '';
+  }
+
+  async function connect() {
+    if (!window.ethereum) {
+      window.open('https://metamask.io/download/', '_blank');
+      return;
+    }
+    try {
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      if (accounts[0]) setConnected(accounts[0]);
+    } catch (err) {
+      if (err.code !== 4001) console.warn('Wallet connect error:', err);
+    }
+  }
+
+  // Check if already authorized
+  if (window.ethereum) {
+    window.ethereum.request({ method: 'eth_accounts' })
+      .then(accounts => { if (accounts[0]) setConnected(accounts[0]); })
+      .catch(() => {});
+    window.ethereum.on('accountsChanged', accounts =>
+      accounts[0] ? setConnected(accounts[0]) : setDisconnected()
+    );
+    window.ethereum.on('chainChanged', () => window.location.reload());
+  }
+
+  btn.addEventListener('click', connect);
+})();
+</script>
+</body>
+</html>
