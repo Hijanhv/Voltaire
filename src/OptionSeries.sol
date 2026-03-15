@@ -179,11 +179,15 @@ contract OptionSeries {
         if (v == 0) return "0";
         uint256 tmp = v;
         uint256 digits;
-        while (tmp != 0) digits++;
-        tmp /= 10;
+        while (tmp != 0) {
+            digits++;
+            tmp /= 10;
+        }
         bytes memory buf = new bytes(digits);
-        while (v != 0) buf[--digits] = bytes1(uint8(48 + v % 10));
-        v /= 10;
+        while (v != 0) {
+            buf[--digits] = bytes1(uint8(48 + v % 10));
+            v /= 10;
+        }
         return string(buf);
     }
 

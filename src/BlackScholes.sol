@@ -133,8 +133,8 @@ library BlackScholes {
         // pdf = exp(-x^2/2) / sqrt(2*pi) scaled to 1e18
         uint256 pdf = _stdNormPdf(x);
 
-        // cdf = 1 - pdf * poly / 1e9
-        uint256 sub = mulDiv(pdf, poly / 1e9, WAD);
+        // cdf = 1 - pdf * poly  (both pdf and poly are in WAD format)
+        uint256 sub = mulDiv(pdf, poly, WAD);
         return sub < WAD ? WAD - sub : 0;
     }
 
@@ -241,10 +241,20 @@ library BlackScholes {
         int256 k = x / ln2; // integer part of x/ln2
         int256 r = x - k * ln2; // |r| < ln2
 
-        // e^r via Horner
+        // e^r via incremental Taylor: accumulate r^n/n! term-by-term to avoid int256 overflow.
+        // Direct r^5 computation overflows since |r| can reach ln2 ≈ 6.93e17.
         int256 wad = int256(WAD);
-        int256 er = wad + r + (r * r) / (2 * wad) + (r * r * r) / (6 * wad * wad) + (r * r * r * r)
-            / (24 * wad * wad * wad) + (r * r * r * r * r) / (120 * wad * wad * wad * wad);
+        int256 er = wad;
+        int256 rn = r; // r^1
+        er += rn;
+        rn = rn * r / (2 * wad); // r^2 / 2!
+        er += rn;
+        rn = rn * r / (3 * wad); // r^3 / 3!
+        er += rn;
+        rn = rn * r / (4 * wad); // r^4 / 4!
+        er += rn;
+        rn = rn * r / (5 * wad); // r^5 / 5!
+        er += rn;
 
         // Multiply by 2^k
         if (er <= 0) return 0;

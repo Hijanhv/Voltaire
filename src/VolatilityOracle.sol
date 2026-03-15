@@ -112,7 +112,7 @@ contract VolatilityOracle {
         obs = new uint256[](count);
         uint256 head = historyHead;
         for (uint256 i = 0; i < count; i++) {
-            uint256 idx = (head - 1 - i + HISTORY_SIZE) % HISTORY_SIZE;
+            uint256 idx = (head + HISTORY_SIZE - 1 - i) % HISTORY_SIZE;
             obs[i] = history[idx];
         }
     }
