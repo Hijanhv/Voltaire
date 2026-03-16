@@ -47,7 +47,15 @@ contract OptionSeries {
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
+    address public owner;
+
     constructor(address _hook) {
+        hook = _hook;
+        owner = msg.sender;
+    }
+
+    function setHook(address _hook) external {
+        require(msg.sender == owner, "only owner");
         hook = _hook;
     }
 

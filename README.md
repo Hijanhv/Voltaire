@@ -456,10 +456,10 @@ Voltaire is deployed and live on **Unichain Sepolia** — Uniswap's official tes
 
 | Contract | Address | Explorer |
 |---|---|---|
-| `OptionsHook` | `0xD9789FEc57c950638D1Ba88941a0C65f32F81f58` | [View](https://sepolia.uniscan.xyz/address/0xD9789FEc57c950638D1Ba88941a0C65f32F81f58) |
-| `CollateralVault` | `0xB4A9Ddc348D8814c95Fd6811B2899f5036920324` | [View](https://sepolia.uniscan.xyz/address/0xB4A9Ddc348D8814c95Fd6811B2899f5036920324) |
-| `OptionSeries` | `0x846f41aE723Ea3f81DeD68783B17aCa489714aF8` | [View](https://sepolia.uniscan.xyz/address/0x846f41aE723Ea3f81DeD68783B17aCa489714aF8) |
-| `VolatilityOracle` | `0x013dEE73A250A754705Dedc3A326cD9da9a4c856` | [View](https://sepolia.uniscan.xyz/address/0x013dEE73A250A754705Dedc3A326cD9da9a4c856) |
+| `OptionsHook` | `0xdF4d01D6fc9E28940AB3Baecc3CFCd6689a9e815` | [View](https://sepolia.uniscan.xyz/address/0xdF4d01D6fc9E28940AB3Baecc3CFCd6689a9e815) |
+| `CollateralVault` | `0xbD0F937f4ec7a4584aC5535655E4245842Cf2fF7` | [View](https://sepolia.uniscan.xyz/address/0xbD0F937f4ec7a4584aC5535655E4245842Cf2fF7) |
+| `OptionSeries` | `0xD9b5413fe685e1D5d7C9960726fd4986A9EFcbC8` | [View](https://sepolia.uniscan.xyz/address/0xD9b5413fe685e1D5d7C9960726fd4986A9EFcbC8) |
+| `VolatilityOracle` | `0x60E045da4c55778d1F56cD13550F901E0C0C7b11` | [View](https://sepolia.uniscan.xyz/address/0x60E045da4c55778d1F56cD13550F901E0C0C7b11) |
 
 **Deployer:** `0x9978E5462E76F86925eF6471B8af61A654B598Ab`
 **Deployment tx:** See [`broadcast/DeploySepolia.s.sol/1301/run-latest.json`](broadcast/DeploySepolia.s.sol/1301/run-latest.json)
