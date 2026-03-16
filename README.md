@@ -799,7 +799,7 @@ voltaire/
 
 <div align="center">
 
-Built for [ETHGlobal](https://ethglobal.com) · Unichain · Reactive Network · x402
+Built on Unichain · Reactive Network · x402
 
 *"Options were always a good idea. Real-time cross-chain vol just made them viable."*
 
