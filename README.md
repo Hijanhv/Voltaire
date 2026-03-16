@@ -2,16 +2,17 @@
 
 <div align="center">
 
-**Buy and sell crypto options directly inside a Uniswap swap. No brokers. No middlemen. Priced fairly in real time.**
+**The first on-chain European options AMM where volatility is a live cross-chain fact — not a stale assumption.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: BSL-1.1](https://img.shields.io/badge/License-BSL--1.1-blue.svg)](#license)
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.26-363636?logo=solidity)](https://docs.soliditylang.org/)
 [![Uniswap V4](https://img.shields.io/badge/Uniswap-V4%20Hook-ff007a)](https://docs.uniswap.org/contracts/v4/overview)
 [![Reactive Network](https://img.shields.io/badge/Reactive-Network-6366f1)](https://reactive.network)
 [![Foundry](https://img.shields.io/badge/Built%20with-Foundry-FFDB1C)](https://getfoundry.sh)
 [![Tests](https://img.shields.io/badge/Tests-112%20passing-brightgreen)]()
+[![Testnet](https://img.shields.io/badge/Deployed-Unichain%20Sepolia-8b5cf6)](https://sepolia.uniscan.xyz)
 
-[Trade Options](#how-to-use-voltaire) · [Architecture](#how-it-works-simple-version) · [Live Contracts](#live-on-testnet) · [For Developers](#for-developers)
+[What is This?](#what-is-voltaire) · [The Problem](#the-problem) · [How It Works](#how-it-works) · [Live Contracts](#live-on-testnet) · [What I Learned](#what-i-learned-building-this)
 
 </div>
 
@@ -19,118 +20,506 @@
 
 ## What is Voltaire?
 
-Voltaire lets anyone buy **options** on ETH — directly inside Uniswap — without needing a brokerage account, a KYC process, or any middleman.
+Voltaire is a **Uniswap V4 hook** that turns any ETH/USDC liquidity pool into a fully on-chain European options market.
 
-> **Not sure what an option is?** Keep reading. It's simpler than it sounds.
+In plain English: instead of just swapping ETH for USDC, you can now buy an **options contract** directly inside a Uniswap swap — in one transaction, with no broker, no KYC, no off-chain server.
+
+Options are priced in real time using the **Black-Scholes formula** running entirely in Solidity, fed by live volatility data aggregated from 4 blockchains by **Reactive Network**. Settlement at expiry is fully automatic — no bots to fund, no humans required.
 
 ---
 
 ## What is an Option? (Plain English)
 
-Imagine ETH is trading at **$3,000** today.
+Imagine ETH is at **$3,000** today. You think it might hit $4,000 in 30 days but you're not sure. You don't want to risk your full capital.
 
-You think it might go up to $4,000, but you're not 100% sure. You don't want to risk buying a full ETH in case you're wrong.
+Instead you buy a **call option** for a small fee called a **premium** — say $70.
 
-Instead, you buy an **option** — specifically a **call option** — for a small fee (called a *premium*), say **$70**.
-
-Here's what that means:
-
-| Scenario | What happens |
+| What happens at expiry | Your outcome |
 |---|---|
-| ETH goes to **$4,000** at expiry | You profit $1,000 − $70 = **$930** |
-| ETH stays at **$3,000** | You lose only your $70 premium |
-| ETH crashes to **$1,000** | You still lose only your $70 premium |
+| ETH rises to **$4,000** | You profit $1,000 − $70 = **$930** |
+| ETH stays at $3,000 | You lose only **$70** |
+| ETH crashes to $1,000 | You still lose only **$70** |
 
-**Your maximum loss is always just what you paid upfront.** That's the power of options — defined risk, unlimited upside.
+**Your maximum loss is always just the premium you paid.** That's the power of options — defined risk, leveraged upside.
 
-You can also buy a **put option** if you think ETH will fall. A put profits when the price drops below your chosen level.
+A **put option** works the other way — it profits when price falls. Useful for protecting existing ETH holdings from a crash (like insurance).
 
 ---
 
-## What is Voltaire Solving?
+## The Problem
 
-Options have existed in traditional finance (stocks, commodities) for decades. But in crypto, on-chain options have always had one fatal flaw: **the price is always wrong.**
+On-chain options have existed since 2020. Every single protocol that launched has either died, lost user funds, or been arbitraged into irrelevance. The reason is always the same: **volatility is always wrong**.
 
-Here's why existing crypto options protocols fail:
+Here's the full breakdown of why existing approaches fail:
 
-| Problem | What it means in plain terms |
+### Problem 1 — Stale Volatility (The Core Failure)
+
+Options pricing depends critically on volatility — how much the asset has been moving. If volatility is wrong, the price is wrong. If the price is wrong, arbitrageurs drain the pool.
+
+Every existing on-chain options protocol uses one of these broken approaches:
+
+| Approach | Why it fails |
 |---|---|
-| **Stale volatility** | The price of an option depends heavily on how much the market is moving. Old protocols use a fixed "volatility" number set by an admin — like checking yesterday's weather forecast for today. Options are instantly mispriced. |
-| **One source of data** | If you only watch one exchange to judge how volatile ETH is, a whale can temporarily manipulate that exchange and game the pricing. |
-| **Human keepers** | When an option expires, someone has to trigger the settlement on-chain. Old protocols depend on bots funded by a team. If the bot goes down, your money is stuck. |
-| **Off-chain order books** | Some protocols pretend to be DeFi but actually run a centralized server for matching orders. Not truly decentralized. |
+| **Admin-set fixed vol** | Set once, stale immediately. Bots front-run any update. |
+| **Single-chain TWAP** | One exchange can be manipulated via flash loans in low-liquidity windows. |
+| **Chainlink vol feed** | Chainlink doesn't publish implied vol. Protocols that use it are hacking together something that doesn't exist. |
+| **Off-chain vol server** | Centralized. Server goes down = protocol frozen. |
 
-**Voltaire fixes all of this.**
+### Problem 2 — Keeper-Dependent Settlement
+
+When an option expires, someone must trigger settlement on-chain. Existing protocols use keeper bots — funded servers that watch the chain and submit transactions.
+
+Problems:
+- Keeper runs out of ETH → settlement delayed or missed
+- Keeper team shuts down → all outstanding options stuck forever
+- Keeper can be front-run by MEV bots
+
+### Problem 3 — Off-Chain Order Books
+
+Protocols like Deribit and Lyra's early versions ran matching engines off-chain. This means:
+- A server operator can front-run your order
+- The "DeFi" label is misleading — it's just a database with a blockchain settlement layer
+- Single point of failure
+
+### Problem 4 — Writers Earn Nothing
+
+Option writers (liquidity providers) lock up capital as collateral. In existing protocols, this capital earns zero yield while idle. Writers are taking on risk for no ongoing return.
 
 ---
 
-## How Voltaire Fixes It
+## The Solution
 
-| Old Problem | Voltaire's Solution |
-|---|---|
-| Stale volatility | Pulls **live volatility data from 4 blockchains** (Ethereum, Arbitrum, Base, BSC), updated 288 times per day — like a real-time weather feed instead of yesterday's forecast |
-| One source manipulation | Using data from 4 chains means a manipulator would need to move all 4 markets simultaneously — economically impossible |
-| Human keepers | **Reactive Network** automatically triggers settlement at expiry — zero humans, zero bots to fund, zero risk of it going down |
-| Off-chain logic | Everything runs inside a **Uniswap V4 hook** — 100% on-chain, 100% transparent, no hidden servers |
-| Writers earn nothing | Liquidity providers earn option premiums as yield — **17.3% APY demonstrated** |
+Voltaire eliminates every failure mode:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        THE VOLTAIRE SOLUTION                        │
+├──────────────────────┬──────────────────────────────────────────────┤
+│ PROBLEM              │ VOLTAIRE FIX                                 │
+├──────────────────────┼──────────────────────────────────────────────┤
+│ Stale/fake vol       │ Reactive Network aggregates REAL realized    │
+│                      │ vol from 4 chains, 288 samples/day           │
+├──────────────────────┼──────────────────────────────────────────────┤
+│ Single-chain         │ Cross-chain aggregation — manipulating one   │
+│ manipulation         │ chain barely moves the aggregate             │
+├──────────────────────┼──────────────────────────────────────────────┤
+│ Keeper bots          │ Reactive Network cron fires settleExpired-   │
+│                      │ Series() automatically at each expiry        │
+├──────────────────────┼──────────────────────────────────────────────┤
+│ Off-chain logic      │ Everything lives in a Uniswap V4 hook —      │
+│                      │ 100% on-chain, zero hidden servers           │
+├──────────────────────┼──────────────────────────────────────────────┤
+│ Idle writer capital  │ CollateralVault compounds premiums into      │
+│                      │ share NAV → 17.3% APY demonstrated           │
+└──────────────────────┴──────────────────────────────────────────────┘
+```
 
 ---
 
-## What is a "Uniswap V4 Hook"?
+## What is a Uniswap V4 Hook?
 
-Uniswap is the largest decentralized exchange. Version 4 introduced a new feature called **hooks** — think of them as plugins or add-ons that run automatically during a swap.
+Uniswap V4 introduced **hooks** — smart contracts that plug into a liquidity pool and run custom logic at specific moments during a swap.
 
-Normally when you swap ETH for USDC on Uniswap, it just exchanges tokens at the market price.
+Think of it like this:
 
-With Voltaire's hook:
-- You send a swap with some extra instructions (strike price, expiry date, call or put)
-- Before the swap executes, the hook **intercepts it**, prices your option using a mathematical formula, checks there's enough collateral, and instantly gives you an **option token** in your wallet
-- The premium you pay comes out of the same transaction — no extra steps
+```
+┌─────────────────────────────────────────────────────┐
+│              WITHOUT A HOOK (Uniswap V3)            │
+│                                                     │
+│  You send ETH  ──▶  Pool swaps it  ──▶  You get USDC│
+│                                                     │
+│               That's it. Nothing else.              │
+└─────────────────────────────────────────────────────┘
 
-**It's like Uniswap growing an options desk inside itself, with no new exchange needed.**
+┌─────────────────────────────────────────────────────┐
+│            WITH VOLTAIRE HOOK (Uniswap V4)          │
+│                                                     │
+│  You send USDC                                      │
+│  + option instructions (strike, expiry, call/put)   │
+│         │                                           │
+│         ▼                                           │
+│  ┌─────────────────────────────┐                   │
+│  │     HOOK INTERCEPTS         │                   │
+│  │  1. Read live ETH price     │                   │
+│  │  2. Read live volatility    │                   │
+│  │  3. Run Black-Scholes math  │                   │
+│  │  4. Check vault liquidity   │                   │
+│  │  5. Mint option token       │                   │
+│  │  6. Lock collateral         │                   │
+│  └─────────────────────────────┘                   │
+│         │                                           │
+│         ▼                                           │
+│  Option token lands in your wallet                  │
+│  All in ONE transaction                             │
+└─────────────────────────────────────────────────────┘
+```
+
+The hook is like a plugin that runs **before every swap**, decides what to do, and can completely transform what the swap means — from a token exchange into an options purchase.
+
+---
+
+## How It Works
+
+### Full System Architecture
+
+```
+╔═══════════════════════════════════════════════════════════════════════╗
+║                     CROSS-CHAIN VOLATILITY LAYER                      ║
+╠═══════════════╦═══════════════╦═══════════════╦═══════════════╗       ║
+║   ETHEREUM    ║   ARBITRUM    ║     BASE      ║      BSC      ║       ║
+║               ║               ║               ║               ║       ║
+║  ETH/USDC     ║  ETH/USDC     ║  ETH/USDC     ║  ETH/USDC     ║       ║
+║  TWAP events  ║  TWAP events  ║  TWAP events  ║  TWAP events  ║       ║
+║  35% weight   ║  30% weight   ║  20% weight   ║  15% weight   ║       ║
+╚══════╤════════╩═══════╤═══════╩═══════╤═══════╩═══════╤═══════╝       ║
+       │                │               │               │               ║
+       └────────────────┴───────────────┴───────────────┘               ║
+                                    │                                   ║
+                                    ▼                                   ║
+                    ┌───────────────────────────────┐                  ║
+                    │        REACTIVE NETWORK        │                  ║
+                    │                                │                  ║
+                    │  • Aggregates realized vol     │                  ║
+                    │  • 288 samples/day/chain       │                  ║
+                    │  • Weighted by liquidity depth │                  ║
+                    │  • Pushes to VolatilityOracle  │                  ║
+                    │  • Fires cron at each expiry   │                  ║
+                    └──────────────┬────────────────┘                  ║
+                                   │                                    ║
+╔══════════════════════════════════▼════════════════════════════════════╗
+║                        UNICHAIN PROTOCOL LAYER                        ║
+║                                                                       ║
+║  ┌─────────────────────────────────────────────────────────────────┐  ║
+║  │                    VolatilityOracle.sol                         │  ║
+║  │  • Stores latest σ (volatility)                                 │  ║
+║  │  • Ring buffer of 48 observations                               │  ║
+║  │  • Reverts if data > 1 hour old (staleness guard)               │  ║
+║  └──────────────────────────────┬──────────────────────────────────┘  ║
+║                                 │  getVolatility()                    ║
+║                                 ▼                                     ║
+║  ┌─────────────────────────────────────────────────────────────────┐  ║
+║  │                      BlackScholes.sol                           │  ║
+║  │  • Pure Solidity math library (no external calls)               │  ║
+║  │  • price(S, K, t, σ, isCall) → premium in WAD                  │  ║
+║  │  • lnWad, expWad, sqrt, normcdf — all on-chain                  │  ║
+║  └──────────────────────────────┬──────────────────────────────────┘  ║
+║                                 │  unitPremium                        ║
+║                                 ▼                                     ║
+║  ┌─────────────────────────────────────────────────────────────────┐  ║
+║  │                      OptionsHook.sol                            │  ║
+║  │                                                                 │  ║
+║  │  beforeSwap() ──── intercepts every swap                        │  ║
+║  │       │                                                         │  ║
+║  │       ├── prices option via Black-Scholes                       │  ║
+║  │       ├── checks vault liquidity                                │  ║
+║  │       ├── mints ERC20 option token                              │  ║
+║  │       ├── locks collateral                                      │  ║
+║  │       └── returns BeforeSwapDelta (collects premium)            │  ║
+║  │                                                                 │  ║
+║  │  settleExpiredSeries() ── called by Reactive cron               │  ║
+║  │  claimSettlement()     ── called by option holders              │  ║
+║  └───────────────┬─────────────────────┬───────────────────────────┘  ║
+║                  │                     │                              ║
+║                  ▼                     ▼                              ║
+║  ┌───────────────────────┐  ┌─────────────────────────────────────┐  ║
+║  │   OptionSeries.sol    │  │        CollateralVault.sol           │  ║
+║  │                       │  │                                     │  ║
+║  │  • Series registry    │  │  • Holds USDC from LPs              │  ║
+║  │  • One ERC20 token    │  │  • lockCollateral per series        │  ║
+║  │    per series         │  │  • receivePremium → share NAV ↑     │  ║
+║  │  • ETH-3400-MAR26-C   │  │  • paySettlement to winners        │  ║
+║  │  • mint / burn        │  │  • 17.3% APY demonstrated           │  ║
+║  └───────────┬───────────┘  └─────────────────────────────────────┘  ║
+║              │                                                        ║
+║              ▼                                                        ║
+║      ERC20 Option Token ──▶ Trader's Wallet                          ║
+╚═══════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+### Swap Flow — Step by Step
+
+```
+TRADER                    UNISWAP V4                  VOLTAIRE HOOK
+  │                           │                             │
+  │  swap(hookData: {         │                             │
+  │    strike: $3400,         │                             │
+  │    expiry: Mar 28,        │                             │
+  │    isCall: true,          │                             │
+  │    qty: 1 contract,       │                             │
+  │    maxPremium: $200       │                             │
+  │  })                       │                             │
+  ├──────────────────────────▶│                             │
+  │                           │  beforeSwap()               │
+  │                           ├────────────────────────────▶│
+  │                           │                             │
+  │                           │                    ┌────────┴────────┐
+  │                           │                    │ 1. Read spot    │
+  │                           │                    │    from pool    │
+  │                           │                    │    sqrtPriceX96 │
+  │                           │                    ├─────────────────┤
+  │                           │                    │ 2. Read σ from  │
+  │                           │                    │    VolOracle    │
+  │                           │                    │    (reverts if  │
+  │                           │                    │    stale > 1h)  │
+  │                           │                    ├─────────────────┤
+  │                           │                    │ 3. Black-Scholes│
+  │                           │                    │    price(S,K,t, │
+  │                           │                    │    σ, isCall)   │
+  │                           │                    │    = $142.30    │
+  │                           │                    ├─────────────────┤
+  │                           │                    │ 4. Check:       │
+  │                           │                    │    $142 < $200  │
+  │                           │                    │    maxPremium ✓ │
+  │                           │                    ├─────────────────┤
+  │                           │                    │ 5. Check vault  │
+  │                           │                    │    has $3400    │
+  │                           │                    │    liquidity ✓  │
+  │                           │                    ├─────────────────┤
+  │                           │                    │ 6. lockCollat-  │
+  │                           │                    │    eral($3400)  │
+  │                           │                    ├─────────────────┤
+  │                           │                    │ 7. mint option  │
+  │                           │                    │    token to     │
+  │                           │                    │    trader       │
+  │                           │                    ├─────────────────┤
+  │                           │                    │ 8. return delta │
+  │                           │                    │    (-$142.30)   │
+  │                           │                    └────────┬────────┘
+  │                           │◀───────────────────────────┤
+  │                           │  debit $142.30 USDC         │
+  │                           │  from trader's swap         │
+  │◀──────────────────────────┤                             │
+  │  ETH-3400-MAR26-C token   │                             │
+  │  lands in wallet          │                             │
+```
+
+---
+
+### Settlement Flow — What Happens at Expiry
+
+```
+TIME: March 28, 2026 — 00:00:00 UTC
+
+        REACTIVE NETWORK CRON
+               │
+               │  settleExpiredSeries(seriesId=42, spotPrice=$3800)
+               ▼
+        OptionsHook.sol
+               │
+        ┌──────┴──────┐
+        │             │
+   isCall=true    isCall=false
+   spot > strike  strike > spot
+        │             │
+        ▼             ▼
+    ITM ✓          OTM ✗
+  intrinsic=     unlockCollateral()
+  $3800-$3400    writers keep premium
+    = $400
+        │
+        ▼
+  settleSeries(seriesId, $3800)
+  (mark settled, store price)
+
+        ↓ later, holder calls:
+
+TRADER
+  │  claimSettlement(seriesId=42)
+  ▼
+OptionsHook
+  │  balance = 1 contract = 1e18
+  │  payout = $400 × 1 = $400
+  │  burn option token
+  │  vault.paySettlement(USDC, trader, $400)
+  ▼
+$400 USDC lands in trader's wallet
+```
+
+---
+
+### How the Volatility Oracle Works
+
+```
+                    EVERY 5 MINUTES
+                         │
+    ┌────────────────────┼────────────────────┐
+    ▼                    ▼                    ▼
+ Ethereum            Arbitrum             Base + BSC
+ ETH/USDC            ETH/USDC             ETH/USDC
+ realized vol        realized vol         realized vol
+    │                    │                    │
+    └────────────────────┼────────────────────┘
+                         │
+                         ▼
+              ┌─────────────────────┐
+              │   REACTIVE NETWORK  │
+              │                     │
+              │  weighted average:  │
+              │  σ = 0.35×σ_eth     │
+              │    + 0.30×σ_arb     │
+              │    + 0.20×σ_base    │
+              │    + 0.15×σ_bsc     │
+              └──────────┬──────────┘
+                         │  updateVolatility(σ, chainsMask, samples)
+                         ▼
+              ┌─────────────────────┐
+              │  VolatilityOracle   │   Ring buffer: 48 slots
+              │                     │   ┌──┬──┬──┬──┬──┬──┐
+              │  volatility = 0.72  │   │48│47│46│..│ 2│ 1│ ← newest
+              │  lastUpdated = now  │   └──┴──┴──┴──┴──┴──┘
+              │                     │
+              │  getVolatility():   │
+              │  if age > 1 hour    │
+              │    REVERT ✗         │   ← safety guard
+              │  else return σ ✓    │
+              └─────────────────────┘
+```
+
+---
+
+### What is Unichain?
+
+Unichain is a new blockchain built by the Uniswap team — designed from scratch specifically for DeFi and trading applications.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    BLOCKCHAIN COMPARISON                             │
+├───────────────────┬──────────────────┬──────────────────────────────┤
+│                   │   ETHEREUM       │   UNICHAIN                   │
+├───────────────────┼──────────────────┼──────────────────────────────┤
+│ Block time        │ 12 seconds       │ ~1 second                    │
+│ Gas cost per swap │ $5 – $30         │ < $0.01                      │
+│ V4 hook support   │ Yes              │ Native (optimized)           │
+│ Best for          │ General purpose  │ DeFi, swaps, options         │
+└───────────────────┴──────────────────┴──────────────────────────────┘
+```
+
+For Voltaire, Unichain means:
+- Your option purchase settles in **~1 second**
+- Gas to buy an option costs **less than a penny**
+- V4 hooks like Voltaire are first-class citizens
+
+---
+
+### What is Reactive Network?
+
+Reactive Network is infrastructure that watches multiple blockchains at once and fires on-chain transactions automatically when conditions are met.
+
+Voltaire uses it for two jobs:
+
+```
+JOB 1 — LIVE VOLATILITY FEED
+─────────────────────────────
+
+  Every 5 minutes:
+  Ethereum ──┐
+  Arbitrum ──┤──▶ Reactive aggregates ──▶ pushes σ to VolatilityOracle
+  Base     ──┤    288×/day per chain        on Unichain
+  BSC      ──┘
+
+  Result: Options always priced on REAL volatility.
+  Manipulation requires moving 4 markets at once. Practically impossible.
+
+
+JOB 2 — AUTOMATIC SETTLEMENT
+──────────────────────────────
+
+  Option expires March 28, 8:00pm UTC
+          │
+          │  [no human needed]
+          │
+          ▼
+  Reactive cron job fires exactly at expiry
+          │
+          ▼
+  settleExpiredSeries() called on Unichain
+          │
+          ▼
+  Winners can claim their payout immediately
+
+  Result: Zero keeper bots. Zero infrastructure to maintain.
+          Zero risk of settlement failing.
+```
+
+---
+
+## Live on Testnet
+
+Voltaire is deployed and live on **Unichain Sepolia** — Uniswap's official test network.
+
+**Network:** Unichain Sepolia
+**Chain ID:** 1301
+**RPC:** `https://sepolia.unichain.org`
+**Explorer:** [sepolia.uniscan.xyz](https://sepolia.uniscan.xyz)
+
+| Contract | Address | Explorer |
+|---|---|---|
+| `OptionsHook` | `0xD9789FEc57c950638D1Ba88941a0C65f32F81f58` | [View](https://sepolia.uniscan.xyz/address/0xD9789FEc57c950638D1Ba88941a0C65f32F81f58) |
+| `CollateralVault` | `0xB4A9Ddc348D8814c95Fd6811B2899f5036920324` | [View](https://sepolia.uniscan.xyz/address/0xB4A9Ddc348D8814c95Fd6811B2899f5036920324) |
+| `OptionSeries` | `0x846f41aE723Ea3f81DeD68783B17aCa489714aF8` | [View](https://sepolia.uniscan.xyz/address/0x846f41aE723Ea3f81DeD68783B17aCa489714aF8) |
+| `VolatilityOracle` | `0x013dEE73A250A754705Dedc3A326cD9da9a4c856` | [View](https://sepolia.uniscan.xyz/address/0x013dEE73A250A754705Dedc3A326cD9da9a4c856) |
+
+**Deployer:** `0x9978E5462E76F86925eF6471B8af61A654B598Ab`
+**Deployment tx:** See [`broadcast/DeploySepolia.s.sol/1301/run-latest.json`](broadcast/DeploySepolia.s.sol/1301/run-latest.json)
 
 ---
 
 ## How to Use Voltaire
 
-### As a Trader (Buying Options)
+### As a Trader — Buying an Option
 
-You want to bet that ETH will be above $3,400 by March 28, 2026.
+You believe ETH will be above $3,400 by March 28, 2026.
 
-1. Go to the Voltaire app (or connect via Uniswap with Voltaire hook active)
-2. Choose: **ETH-3400-MAR26-CALL**
-3. Set how many contracts you want
-4. Set your maximum premium you're willing to pay (slippage protection)
-5. Submit the swap — you pay the premium in USDC
-6. You receive an **ETH-3400-MAR26-C** token in your wallet — this IS your option
+**Step 1** — Connect your wallet to Unichain Sepolia
 
-**At expiry:**
-- If ETH > $3,400: claim your payout in USDC automatically
-- If ETH ≤ $3,400: your option expires worthless, you keep nothing (but you only ever risked the premium)
+**Step 2** — Prepare your swap call with option parameters:
+```
+Strike:      $3,400
+Expiry:      March 28, 2026
+Type:        Call (you think ETH goes UP)
+Quantity:    1 contract
+Max premium: $200 (your slippage limit)
+```
 
-### As a Liquidity Provider (Earning Yield)
+**Step 3** — Submit the swap. You pay ~$142 USDC in premium.
 
-You have USDC sitting idle and want to earn yield on it.
+**Step 4** — Token `ETH-3400-MAR26-C` appears in your wallet. This IS your option.
 
-1. Deposit USDC into the **CollateralVault**
-2. Your USDC backs the options that traders buy
-3. Every premium paid by traders flows into the vault
-4. Your share of the vault grows — you withdraw more USDC than you put in
-5. **Demonstrated yield: 17.3% APY**
+**Step 5 — At expiry (automatic):**
+```
+ETH = $3,800 → claim $400 payout   (profit: $400 - $142 = $258)
+ETH = $3,200 → option expires worthless (loss: $142 premium only)
+```
 
-Risk: if many options expire in-the-money (traders win big), your vault balance decreases. This is the standard risk of being an options market maker.
+### As a Liquidity Provider — Earning Yield
 
-### As an AI Agent (Fully Autonomous)
+You have idle USDC and want to earn yield.
 
-Voltaire supports the **x402 protocol** — AI agents can buy options with no human involvement:
+**Step 1** — Deposit USDC into `CollateralVault`
+**Step 2** — You receive vault shares
+**Step 3** — Every premium paid by traders flows into the vault automatically
+**Step 4** — Your shares become worth more over time
+**Step 5** — Withdraw anytime (when liquidity is not locked backing active options)
 
-1. Agent requests a quote via HTTP
-2. Server responds: "Pay $142.30 USDC to this address"
-3. Agent broadcasts the transaction on-chain
-4. Option token lands in agent's wallet
-5. At expiry, payout is automatic
+**Demonstrated yield: 17.3% APY**
 
-No accounts. No API keys. No humans in the loop.
+Risk: if many options expire in-the-money in the same period, vault NAV decreases.
+
+### As an AI Agent (x402)
+
+Voltaire supports the x402 machine-payment protocol. An AI agent can buy options with zero human involvement:
+
+```
+Agent ──▶ GET /api/v1/options/quote?strike=3400&expiry=MAR26&type=call
+       ◀── HTTP 402: Pay 142.30 USDC to 0xD9789F...
+       ──▶ broadcast USDC tx on-chain
+       ◀── ETH-3400-MAR26-C token in agent wallet
+       ... [at expiry, auto-settled by Reactive]
+       ──▶ claimSettlement()
+       ◀── USDC payout
+```
 
 ---
 
@@ -138,315 +527,211 @@ No accounts. No API keys. No humans in the loop.
 
 | Who | How they use Voltaire |
 |---|---|
-| **ETH holder** | Buy a put option to protect against a crash — like insurance on your ETH |
-| **Trader** | Buy a cheap call to bet on ETH going up without risking your full portfolio |
-| **USDC holder** | Deposit into the vault and earn yield from option premiums — passive income |
-| **DeFi protocol** | Use options to hedge treasury exposure to volatile assets |
-| **AI agent** | Autonomously hedge a portfolio or speculate on volatility without human input |
-| **Institutional** | Access on-chain options with transparent, auditable, manipulation-resistant pricing |
-
----
-
-## What is Unichain? (And Why Does Voltaire Run On It?)
-
-Unichain is a new blockchain built specifically for DeFi — created by the same team that built Uniswap, the world's largest decentralized exchange.
-
-Think of blockchains like cities. Ethereum is New York — huge, powerful, but congested and expensive. Unichain is like a brand-new financial district built from scratch, designed only for trading and financial applications.
-
-**Why Voltaire runs on Unichain:**
-
-| Feature | What it means for you |
-|---|---|
-| **Fast blocks** | Transactions confirm in ~1 second instead of 12 seconds on Ethereum |
-| **Cheap fees** | Gas costs a fraction of a cent instead of dollars |
-| **Built for Uniswap V4** | Native support for hooks like Voltaire — everything just works |
-| **Shared liquidity** | Access to all of Uniswap's existing liquidity pools |
-
-When you buy an option on Voltaire, your transaction settles on Unichain in about one second, for less than a penny in fees. On Ethereum mainnet, the same transaction might cost $20 and take 15 seconds.
-
----
-
-## What is Reactive Network? (The Secret Engine Behind Voltaire)
-
-Reactive Network is infrastructure that watches multiple blockchains simultaneously and automatically triggers actions when conditions are met — without any human intervention.
-
-**The simplest analogy:** Reactive Network is like a smart alarm clock that watches 4 different time zones at once and automatically does things at the right moment.
-
-### How Voltaire uses Reactive Network for two critical jobs:
-
-**Job 1 — Live Volatility Feed**
-
-> *"How much has ETH been moving lately?"*
-
-This is the most important input to options pricing. If ETH has been calm, options are cheap. If ETH has been wild, options are expensive.
-
-The problem: if you only watch one exchange, a whale can temporarily fake calm or fake volatility by making large trades. Your options get mispriced instantly.
-
-Reactive Network solves this by watching **4 blockchains at once** — Ethereum, Arbitrum, Base, and BSC — and sampling the data **288 times per day** (every 5 minutes). It then pushes a single aggregated volatility number to Voltaire's oracle on Unichain.
-
-```
-Ethereum ──┐
-Arbitrum ──┤  Reactive Network  ──▶  VolatilityOracle on Unichain
-Base     ──┤  aggregates all 4        (updated every 5 minutes)
-BSC      ──┘  288 samples/day
-```
-
-To manipulate this number, an attacker would need to move all 4 markets simultaneously — which would cost hundreds of millions of dollars. It's practically impossible.
-
-**Job 2 — Automatic Settlement at Expiry**
-
-> *"My option expires today. Who pays me?"*
-
-In traditional finance, there's a clearing house — a company whose entire job is making sure contracts are settled. In DeFi, most protocols need someone to manually trigger settlement (called a "keeper"). If the keeper bot runs out of funds or goes offline, your option doesn't settle and your money is stuck.
-
-Reactive Network replaces the keeper with a **cron job** — a scheduled task that fires automatically at the exact moment each option expires. Nobody has to fund it. Nobody has to maintain it. It just runs.
-
-```
-Option expires at 8:00pm UTC March 28
-        │
-        ▼
-Reactive Network cron fires automatically
-        │
-        ▼
-settleExpiredSeries() called on Unichain
-        │
-   ┌────┴────┐
-   │         │
-ETH > $3,400  ETH ≤ $3,400
-   │         │
-Payout       Writers keep
-unlocked     the premium
-```
-
-**The result:** Option buyers can trust they'll be paid if they win. Option writers can trust their capital is freed up when options expire. Zero trust in any company or bot operator required.
-
----
-
-## Why Does This Matter?
-
-The global options market is **$10+ trillion** in notional value. Almost none of it is on-chain.
-
-The reason? Pricing has always required trust — trust in a broker to quote you fairly, trust in an exchange not to be manipulated, trust in a settlement system to pay you correctly.
-
-Voltaire removes every one of those trust requirements:
-- Pricing is math, not a broker's quote
-- Volatility comes from 4 chains, not one manipulable source
-- Settlement is automatic, not dependent on a company staying in business
-- Collateral is locked in smart contracts, not held by a custodian
-
----
-
-## How It Works (Simple Version)
-
-```
-You want to buy an ETH call option
-              │
-              ▼
-    You submit a Uniswap swap
-    with option details attached
-              │
-              ▼
-    Voltaire Hook intercepts it
-              │
-      ┌───────┴────────┐
-      │                │
-      ▼                ▼
-  "What's ETH      "How volatile
-   worth now?"      is ETH?"
-      │                │
-      │         Reactive Network
-      │         checks 4 blockchains
-      │         288 times/day
-      │                │
-      └───────┬────────┘
-              │
-              ▼
-    Black-Scholes formula
-    calculates fair premium
-              │
-              ▼
-    Premium deducted from your USDC
-    Option token sent to your wallet
-              │
-              ▼
-         [At Expiry]
-              │
-    Reactive Network auto-settles
-              │
-       ┌──────┴──────┐
-       │             │
-   ETH > strike   ETH ≤ strike
-   Claim payout   Option expires
-   in USDC        worthless
-```
-
----
-
-## How is the Price Calculated?
-
-Voltaire uses the **Black-Scholes formula** — the same mathematical model used by professional options traders on Wall Street since 1973, now running entirely on-chain in Solidity.
-
-The formula takes 5 inputs:
-1. **Current ETH price** — read directly from the Uniswap pool
-2. **Strike price** — what you chose when buying
-3. **Time until expiry** — how many seconds remain
-4. **Volatility** — how much ETH has been moving (pulled live from 4 chains)
-5. **Call or Put** — which direction you're betting
-
-The output is the fair premium you should pay. No human sets this number. No admin can change it. It's pure math.
-
----
-
-## Live on Testnet
-
-Voltaire is deployed and live on **Unichain Sepolia** (Uniswap's official test network).
-
-| Contract | What it does | Address |
-|---|---|---|
-| `OptionsHook` | The brain — intercepts swaps, prices options, handles settlement | [`0xD9789FEc57c950638D1Ba88941a0C65f32F81f58`](https://sepolia.uniscan.xyz/address/0xD9789FEc57c950638D1Ba88941a0C65f32F81f58) |
-| `CollateralVault` | The safe — holds USDC from LPs, pays out winners | [`0xB4A9Ddc348D8814c95Fd6811B2899f5036920324`](https://sepolia.uniscan.xyz/address/0xB4A9Ddc348D8814c95Fd6811B2899f5036920324) |
-| `OptionSeries` | The registry — tracks every option series ever created | [`0x846f41aE723Ea3f81DeD68783B17aCa489714aF8`](https://sepolia.uniscan.xyz/address/0x846f41aE723Ea3f81DeD68783B17aCa489714aF8) |
-| `VolatilityOracle` | The feed — stores live cross-chain volatility data | [`0x013dEE73A250A754705Dedc3A326cD9da9a4c856`](https://sepolia.uniscan.xyz/address/0x013dEE73A250A754705Dedc3A326cD9da9a4c856) |
-
-**Network:** Unichain Sepolia (Chain ID: 1301)
-**Explorer:** [sepolia.uniscan.xyz](https://sepolia.uniscan.xyz)
+| **ETH holder** | Buy put options to protect against a price crash — like insurance |
+| **Trader** | Buy cheap calls to bet on ETH rising without risking full capital |
+| **USDC holder** | Deposit into vault, earn premiums as passive yield (17.3% APY) |
+| **DeFi protocol** | Hedge treasury ETH exposure against market downturns |
+| **AI agent** | Autonomously hedge or speculate with zero human involvement |
+| **Institutional** | Access manipulation-resistant, fully auditable options pricing |
 
 ---
 
 ## Key Numbers
 
-| What | Number |
+| Metric | Value |
 |---|---|
-| Chains powering the volatility index | 4 (Ethereum, Arbitrum, Base, BSC) |
-| Volatility samples per day | 288 per chain |
-| Maximum data age before system pauses | 1 hour (staleness guard) |
-| Demonstrated LP yield | 17.3% APY |
+| Smart contracts deployed | 4 (+ BlackScholes library) |
+| Lines of Solidity | ~3,000 |
+| Test coverage | 112 tests, all passing |
+| Chains feeding volatility | 4 (Ethereum, Arbitrum, Base, BSC) |
+| Volatility samples per day | 288 per chain (every 5 minutes) |
+| Max data staleness before revert | 1 hour |
+| Vault APY demonstrated | 17.3% |
 | Human keepers required | **Zero** |
 | Protocol fee | 0.3% |
-| Test suite | 112 tests, all passing |
+| Testnet | Unichain Sepolia (Chain ID 1301) |
+
+---
+
+## What I Learned Building This
+
+Building Voltaire was one of the most technically demanding projects I've worked on. Here's an honest account of what I learned:
+
+### 1. Fixed-Point Math is Unforgiving
+
+Implementing Black-Scholes in pure Solidity with WAD (1e18) fixed-point arithmetic taught me how quickly intermediate calculations overflow.
+
+The most dangerous moment: computing `r^5` in the Taylor series for `expWad`. A direct multiplication of 5 large WAD values silently overflows `int256`. I had to accumulate incrementally:
+
+```solidity
+// WRONG — overflows int256
+int256 r5 = (r * r * r * r * r) / WAD4;
+
+// CORRECT — accumulate step by step
+int256 r2 = (r * r) / WAD;
+int256 r3 = (r2 * r) / WAD;
+int256 r4 = (r3 * r) / WAD;
+int256 r5 = (r4 * r) / WAD;
+```
+
+**Lesson:** In Solidity math, always think about intermediate values, not just inputs and outputs.
+
+### 2. The `normcdf` Bug That Made Everything Look Right But Be Wrong
+
+My normal CDF implementation was returning values close to 1 for almost all inputs — options were being priced too high across the board, but only slightly. It took days to find because the outputs "looked reasonable."
+
+The bug: an extra `/1e9` in the polynomial evaluation was making the probability term nearly always round up to 1.
+
+```solidity
+// WRONG — extra division made CDF ≈ 1 always
+uint256 p = mulDiv(pdf, poly / 1e9, WAD);
+
+// CORRECT
+uint256 p = mulDiv(pdf, poly, WAD);
+```
+
+**Lesson:** Financial math bugs are subtle. Test against known reference values (I used Python's `scipy.stats.norm.cdf`), not just directional properties.
+
+### 3. The Chicken-and-Egg Hook Deployment Problem
+
+`OptionsHook` needs the address of `OptionSeries` at construction. `OptionSeries` needs the address of `OptionsHook` at construction. Neither can be deployed first.
+
+My solution: deploy `OptionSeries` with the deployer address as a temporary hook, deploy `OptionsHook` with the real series address, then redeploy `OptionSeries` with the real hook address, then redeploy `OptionsHook` with the final series address.
+
+```
+Deploy OptionSeries(deployer as temp hook)
+Deploy OptionsHook(real series address)
+Deploy OptionSeries_FINAL(real hook address)
+Deploy OptionsHook_FINAL(final series address)
+vault.setHook(hookFinal)
+```
+
+**Lesson:** Circular dependencies in smart contracts require careful deployment ordering. Always plan the deployment sequence before writing any deploy script.
+
+### 4. Uniswap V4 Hook Permissions are Encoded in the Address
+
+V4 validates that a hook contract's deployed address encodes the permissions it claims. If the address doesn't end with the right bits, the pool initialization reverts.
+
+For Voltaire (`beforeSwap` + `beforeSwapReturnsDelta`), the address must end in `0x88`.
+
+```
+BEFORE_SWAP              = bit 7 = 0b10000000
+BEFORE_SWAP_RETURNS_DELTA = bit 3 = 0b00001000
+Combined                 = 0b10001000 = 0x88
+```
+
+In production, you must use `HookMiner` + `CREATE2` to find a deployment salt that produces an address with those bits. On testnet I bypassed this constraint — but it means the testnet hook can't be used with a real V4 pool until redeployed at the correct address.
+
+**Lesson:** Read the Uniswap V4 hook documentation carefully before designing your deployment strategy.
+
+### 5. `vm.expectRevert` Cannot Catch Pure Internal Reverts
+
+In Foundry, `vm.expectRevert` intercepts reverts at the call boundary. If the function being tested is `pure` or `internal` and reverts, the test framework can't catch it — the test itself panics.
+
+Fix: wrap the library in an external harness contract:
+
+```solidity
+contract BSHarness {
+    function price(...) external pure returns (uint256) {
+        return BlackScholes.price(...); // now catchable
+    }
+}
+```
+
+**Lesson:** Test design matters as much as contract design. Know your testing framework's constraints before writing tests for edge cases.
+
+### 6. Ring Buffer Underflow in History Retrieval
+
+My `getHistory()` function in `VolatilityOracle` had a uint256 underflow on the very first call (before any updates):
+
+```solidity
+// WRONG — underflows when historyHead < i+1
+uint256 idx = (historyHead - i - 1) % HISTORY_SIZE;
+
+// CORRECT — add HISTORY_SIZE before subtracting
+uint256 idx = (historyHead + HISTORY_SIZE - 1 - i) % HISTORY_SIZE;
+```
+
+**Lesson:** Ring buffer arithmetic always needs the modular addition trick to avoid underflow. Write the test for the empty buffer case first.
+
+### 7. Cross-Chain Architecture Requires Thinking in Async
+
+In traditional programming, you call a function and get a result. In cross-chain systems, data flows asynchronously — Reactive Network pushes updates to the oracle, the oracle stores them, and the hook reads them later.
+
+This means the protocol must be designed to handle gaps: what if the oracle hasn't been updated in 2 hours? (Answer: revert — don't price on stale data.)
+
+**Lesson:** In cross-chain systems, design for failure explicitly. Every data dependency must have a defined behaviour when the data is missing or stale.
+
+---
+
+## Common Pitfalls
+
+If you're building something similar, here are the mistakes I hit so you don't have to:
+
+### Solidity Math
+
+| Pitfall | Symptom | Fix |
+|---|---|---|
+| Overflow in Taylor series | Silent wrong answer or revert | Accumulate intermediate products step by step |
+| Extra division in fixed-point | Output always near boundary value | Audit every `/` in math functions |
+| uint256 ring buffer underflow | Revert on first read | Always add modulus before subtracting in ring buffer index |
+| WAD vs non-WAD mixed | Prices off by 1e18 | Keep units consistent; label every variable with its scale |
+
+### Foundry Testing
+
+| Pitfall | Symptom | Fix |
+|---|---|---|
+| `vm.expectRevert` on pure functions | Test panics instead of passing | Wrap in external harness contract |
+| Hook tests calling hook-only functions | `OnlyHook` revert | Deploy isolated contracts with test contract as the hook |
+| Fuzz test with unbounded inputs | Impossible inputs cause spurious failures | Always `bound()` fuzz inputs to realistic ranges |
+
+### Uniswap V4 Hooks
+
+| Pitfall | Symptom | Fix |
+|---|---|---|
+| Hook address doesn't encode permissions | Pool init reverts | Use HookMiner + CREATE2 in production |
+| Circular deployment dependencies | One contract missing the other's address | Plan deployment order, use temp addresses + setters |
+| BeforeSwapDelta sign confusion | Premium taken twice or not at all | Test delta direction carefully with minimal examples first |
+
+### Cross-Chain / Oracle Design
+
+| Pitfall | Symptom | Fix |
+|---|---|---|
+| No staleness guard | Stale vol propagates silently | Always revert on stale data — never fall back |
+| Single-chain vol source | Manipulable, arbitrageable | Aggregate from multiple chains |
+| Push settlement (iterating holders) | Unbounded gas, DoS risk | Use pull model — holders claim individually |
 
 ---
 
 ## For Developers
 
 <details>
-<summary>Click to expand technical documentation</summary>
-
-### Architecture
-
-```
-╔══════════════════════════════════════════════════════════════════════╗
-║                     CROSS-CHAIN DATA LAYER                           ║
-╠════════════╦════════════╦════════════╦═════════════╗                 ║
-║  Ethereum  ║  Arbitrum  ║    Base    ║     BSC     ║  288 samples/  ║
-║   35% wt   ║   30% wt   ║   20% wt  ║   15% wt   ║  chain/day     ║
-╚═══════╤════╩═══════╤════╩═══════╤════╩═══════╤═════╝                ║
-        └────────────┴────────────┴────────────┘                      ║
-                              │                                        ║
-                              ▼                                        ║
-               ┌──────────────────────────┐                           ║
-               │     REACTIVE NETWORK     │  Computes weighted        ║
-               │  Realized Vol Aggregator │  realized vol             ║
-               │  + Cron Settlement Bot   │  Fires at each expiry     ║
-               └─────────────┬────────────┘                           ║
-                             │                                         ║
-╔════════════════════════════▼═════════════════════════════════════════╗
-║                    UNICHAIN PROTOCOL LAYER                           ║
-║                                                                      ║
-║   VolatilityOracle.sol  ────  getVolatility() (staleness guard)     ║
-║           │                                                          ║
-║           ▼                                                          ║
-║   BlackScholes.sol  ────────  price(S, K, t, σ, isCall) → WAD      ║
-║           │                                                          ║
-║           ▼                                                          ║
-║   OptionsHook.sol  ─────────  beforeSwap() intercept                ║
-║       │           │                                                  ║
-║       ▼           ▼                                                  ║
-║  OptionSeries.sol   CollateralVault.sol                              ║
-║  OptionToken.sol    (USDC, 17.3% APY, utilization tracking)         ║
-║       │                                                              ║
-║       ▼                                                              ║
-║  ERC20 Option Token → Trader's Wallet                                ║
-╚══════════════════════════════════════════════════════════════════════╝
-```
+<summary>Click to expand — project structure, contracts, quick start, deployment</summary>
 
 ### Smart Contracts
 
-| Contract | Lines | Purpose |
-|---|---|---|
-| `OptionsHook.sol` | ~340 | Uniswap V4 hook: `beforeSwap` intercept, option pricing, settlement, admin |
-| `BlackScholes.sol` | ~280 | Pure library: WAD fixed-point BS, A&S N(x) approximation, `lnWad`, `expWad`, `sqrt` |
-| `VolatilityOracle.sol` | ~150 | Stores cross-chain vol pushed by Reactive; ring buffer of 48 observations; staleness revert |
-| `OptionSeries.sol` | ~200 | Registry of all (underlying, quote, strike, expiry, isCall) series; deploys OptionToken per series |
-| `OptionToken.sol` | ~50 | Minimal ERC20 (OpenZeppelin), mint/burn gated to `OptionSeries` |
-| `CollateralVault.sol` | ~200 | Share-based USDC vault; `lockCollateral`, `receivePremium`, `paySettlement` |
-
-**Total: ~1,220 lines core logic + ~1,700 lines comments ≈ 3,000 lines**
-
-### Option Lifecycle (Technical)
-
-**Step 1 — LP deposits USDC**
-
-```solidity
-// CollateralVault.sol
-function deposit(address token, uint256 amount) external returns (uint256 shares)
-// First deposit: 1:1 share ratio
-// Subsequent: shares = amount * totalShares / totalAssets
-```
-
-**Step 2 — Trader initiates swap with hookData**
-
-```solidity
-struct OptionParams {
-    uint256 strike;     // strike price in WAD (e.g. 3400e18 = $3,400)
-    uint256 expiry;     // unix timestamp
-    bool isCall;        // true = call, false = put
-    uint256 quantity;   // contracts in WAD (1e18 = 1 contract)
-    uint256 maxPremium; // slippage guard
-}
-```
-
-**Step 3 — `beforeSwap` prices and fills**
-
-```solidity
-uint256 spot = _getSpotFromPool(key);
-uint256 vol  = volOracle.getVolatility();  // reverts if > 1h stale
-uint256 tte  = p.expiry - block.timestamp;
-uint256 unitPremium = BlackScholes.price(spot, p.strike, tte, vol, p.isCall);
-```
-
-**Step 4 — Reactive Network auto-settles at expiry**
-
-```solidity
-function settleExpiredSeries(uint256 seriesId, uint256 spotPrice) external {
-    if (msg.sender != reactiveCron) revert OnlyReactiveCron();
-    // spotPrice = cross-chain TWAP at expiry, provided by Reactive
-}
-```
-
-**Step 5 — ITM holders claim payout**
-
-```solidity
-uint256 payout = (intrinsic * balance) / 1e18;
-optionSeries.burn(seriesId, msg.sender, balance);
-vault.paySettlement(s.quoteAsset, msg.sender, payout, seriesId);
-```
+| Contract | Purpose |
+|---|---|
+| `OptionsHook.sol` | Uniswap V4 hook: `beforeSwap` intercept, option pricing, settlement, admin |
+| `BlackScholes.sol` | Pure library: WAD fixed-point BS, normcdf, lnWad, expWad |
+| `VolatilityOracle.sol` | Cross-chain vol store: ring buffer of 48 observations, staleness revert |
+| `OptionSeries.sol` | Series registry: create, mint, burn, settle; deploys one ERC20 per series |
+| `OptionToken.sol` | Minimal ERC20 per series (e.g. `ETH-3400-MAR26-C`) |
+| `CollateralVault.sol` | Share-based USDC vault: lock, receivePremium, paySettlement |
 
 ### Quick Start
 
 ```bash
-# Clone
 git clone https://github.com/Hijanhv/Voltaire
 cd Voltaire
 forge install
-
-# Build
 forge build
+forge test -vv  # 112 tests
+```
 
-# Test (112 tests)
-forge test -vv
+### Deploy to Unichain Sepolia
 
-# Deploy to Unichain Sepolia
+```bash
 export PRIVATE_KEY=0x...
 forge script script/DeploySepolia.s.sol \
   --rpc-url https://sepolia.unichain.org \
@@ -459,64 +744,24 @@ forge script script/DeploySepolia.s.sol \
 ```
 voltaire/
 ├── src/
-│   ├── OptionsHook.sol        # Main hook — beforeSwap, settlement, admin
-│   ├── BlackScholes.sol       # Pure math library — lnWad, expWad, normcdf, price()
-│   ├── VolatilityOracle.sol   # Cross-chain vol store — ring buffer, staleness guard
-│   ├── OptionSeries.sol       # Series registry — create, mint, burn, settle
-│   ├── OptionToken.sol        # Minimal ERC20 per series (e.g. ETH-3400-MAR26-C)
-│   └── CollateralVault.sol    # USDC vault — shares, utilization, premium accrual
+│   ├── OptionsHook.sol
+│   ├── BlackScholes.sol
+│   ├── VolatilityOracle.sol
+│   ├── OptionSeries.sol
+│   ├── OptionToken.sol
+│   └── CollateralVault.sol
 ├── script/
-│   ├── DeploySepolia.s.sol    # Testnet deployment
-│   └── InitPool.s.sol         # V4 pool initialization
-├── test/                      # 112 Foundry tests
-├── frontend/                  # Next.js frontend (wagmi, viem)
-└── foundry.toml
-```
-
-### Key Design Decisions
-
-**WAD Fixed-Point Arithmetic** — All math uses 1e18 as the unit. Floating point is non-deterministic across EVM nodes; WAD math produces identical results everywhere.
-
-**Reactive Network for Vol** — Vol requires cross-chain aggregation. Single-chain vol can be manipulated via flash loans. 4 chains + 288 samples/day makes manipulation economically infeasible.
-
-**Pull Model for Settlement** — Push settlement over thousands of holders is unbounded gas cost. Pull model caps per-claim gas at O(1).
-
-**BeforeSwapDelta for Premiums** — Collects premium in the same atomic swap operation. No prior approval needed beyond the swap amount. Option purchase atomically fails if it can't be issued.
-
-**Staleness Revert, Not Fallback** — If vol data is older than 1 hour, the oracle reverts (does not fall back to stale data). Stale vol is worse than no vol — it enables instant arbitrage against LPs.
-
-### Test Suite
-
-```bash
-forge test -vv          # all 112 tests
-forge test --gas-report # gas usage
-forge test --match-test testBlackScholesAtmCall -vvv
-```
-
-Covers: Black-Scholes math correctness, oracle staleness/ring buffer, vault share accounting, series registry deduplication, hook end-to-end integration, ITM/OTM settlement branches, fuzz tests on all numerical inputs.
-
-### Hook Address Requirements
-
-Uniswap V4 encodes hook permissions in the contract address itself:
-
-```
-Flag bits required: BEFORE_SWAP | BEFORE_SWAP_RETURNS_DELTA
-Binary:             0b10001000 = 0x88
-```
-
-In production, use `HookMiner` + `CREATE2` to find a salt that produces an address ending in `0x88`.
-
-### Deployment Order
-
-```
-1. VolatilityOracle
-2. CollateralVault  (temp hook = deployer)
-3. OptionSeries     (temp hook = deployer)
-4. OptionsHook      (wires everything together)
-5. vault.setHook(address(hook))
-6. Redeploy OptionSeries with correct hook
-7. Seed VolatilityOracle
-8. Initialize Uniswap V4 pool
+│   ├── DeploySepolia.s.sol
+│   └── InitPool.s.sol
+├── test/
+│   ├── BlackScholes.t.sol
+│   ├── VolatilityOracle.t.sol
+│   ├── CollateralVault.t.sol
+│   ├── OptionSeries.t.sol
+│   └── OptionsHook.t.sol
+├── frontend/               # Next.js + wagmi
+├── landing/                # index.html landing page
+└── broadcast/              # Deployment artifacts
 ```
 
 </details>
@@ -525,19 +770,12 @@ In production, use `HookMiner` + `CREATE2` to find a salt that produces an addre
 
 ## Further Reading
 
-**Understanding Options**
-- [Options Trading Explained — Investopedia](https://www.investopedia.com/options-basics-tutorial-4583012)
-- [Black-Scholes Model — Plain English](https://en.wikipedia.org/wiki/Black%E2%80%93Scholes_model)
-
-**Uniswap V4**
-- [V4 Hooks Overview](https://docs.uniswap.org/contracts/v4/overview)
-- [What are Hooks? — Uniswap Blog](https://blog.uniswap.org/uniswap-v4)
-
-**Reactive Network**
-- [Reactive Network Documentation](https://docs.reactive.network)
-
-**x402 Protocol**
-- [x402 — HTTP payments for AI agents](https://x402.org)
+- [Uniswap V4 Hooks Overview](https://docs.uniswap.org/contracts/v4/overview)
+- [BeforeSwapDelta Spec](https://docs.uniswap.org/contracts/v4/concepts/hooks/before-swap-return-delta)
+- [Reactive Network Docs](https://docs.reactive.network)
+- [Black-Scholes Model](https://en.wikipedia.org/wiki/Black%E2%80%93Scholes_model)
+- [x402 Protocol](https://x402.org)
+- [Options Trading — Investopedia](https://www.investopedia.com/options-basics-tutorial-4583012)
 
 ---
 
@@ -549,7 +787,13 @@ In production, use `HookMiner` + `CREATE2` to find a salt that produces an addre
 
 ## License
 
-MIT
+**Business Source License 1.1 (BSL-1.1)** — See [LICENSE](LICENSE)
+
+- Educational and non-commercial use is **permitted**
+- Commercial production use requires **prior written consent** from the Licensor
+- Automatically transitions to **MIT License on 2030-01-01**
+
+© 2026 Janhavi Vijay Chavada. All rights reserved.
 
 ---
 
