@@ -703,6 +703,33 @@ If you're building something similar, here are the mistakes I hit so you don't h
 
 ---
 
+## Known Limitations & What Would Be Better With More Time
+
+### Reactive Network RSCs — Not Deployed on Testnet
+
+The two Reactive Smart Contracts (`ReactiveVolatilityRelayer` and `ReactiveExpirySettler`) are **written and ready** but could not be deployed during development due to infrastructure issues with the Reactive Network testnet:
+
+- The Kopli testnet was deprecated mid-build and replaced by the **Lasna testnet**
+- The Lasna faucet requires bridging SepETH → lReact via a faucet contract on Ethereum Sepolia
+- All public Sepolia faucets (Chainlink, Alchemy, QuickNode) require a minimum mainnet ETH balance as spam protection, which blocked access to testnet tokens
+
+**What these RSCs would have done if deployed:**
+
+| Without RSCs (current state) | With RSCs deployed |
+|---|---|
+| VolatilityOracle seeded manually at 70% annualized vol | Vol auto-updated every ~1 hour from real Uniswap V3 swap data across Ethereum, Arbitrum, Base, and BSC |
+| Options priced using a static vol seed | Options priced using live cross-chain realized volatility (35% Ethereum · 30% Arbitrum · 20% Base · 15% BSC weighted) |
+| Expired series must be settled manually via `cast send` | Settlement triggers automatically at expiry — no bots, no keepers, no manual intervention |
+
+The contracts are fully auditable at:
+- [`src/reactive/ReactiveVolatilityRelayer.sol`](src/reactive/ReactiveVolatilityRelayer.sol)
+- [`src/reactive/ReactiveExpirySettler.sol`](src/reactive/ReactiveExpirySettler.sol)
+- [`script/DeployReactive.s.sol`](script/DeployReactive.s.sol)
+
+Once Lasna testnet faucet access is available, deploying them is a single `forge script` command.
+
+---
+
 ## For Developers
 
 <details>
