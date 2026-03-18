@@ -1349,6 +1349,61 @@ Object.entries(URL_MAP).forEach(([id,url])=>{
   const el=document.getElementById(id);
   if(el) el.href=url;
 });
+
+/* ── Connect Wallet (MetaMask / injected) ───────────────── */
+const walletBtn = document.getElementById('btn-wallet');
+let walletConnected = false;
+
+async function connectWallet() {
+  if (!window.ethereum) {
+    alert('No wallet detected. Please install MetaMask.');
+    return;
+  }
+  try {
+    walletBtn.textContent = 'Connecting…';
+    walletBtn.disabled = true;
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    const addr = accounts[0];
+    walletConnected = true;
+    walletBtn.textContent = addr.slice(0,6) + '…' + addr.slice(-4);
+    walletBtn.style.color = 'var(--forest)';
+    walletBtn.style.borderColor = 'var(--forest)';
+    walletBtn.disabled = false;
+  } catch (err) {
+    walletBtn.textContent = 'Connect Wallet';
+    walletBtn.disabled = false;
+  }
+}
+
+if (walletBtn) {
+  walletBtn.addEventListener('click', connectWallet);
+}
+
+// Auto-update if user already connected
+if (window.ethereum) {
+  window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
+    if (accounts.length > 0) {
+      const addr = accounts[0];
+      walletConnected = true;
+      walletBtn.textContent = addr.slice(0,6) + '…' + addr.slice(-4);
+      walletBtn.style.color = 'var(--forest)';
+      walletBtn.style.borderColor = 'var(--forest)';
+    }
+  });
+  window.ethereum.on('accountsChanged', accounts => {
+    if (accounts.length === 0) {
+      walletBtn.textContent = 'Connect Wallet';
+      walletBtn.style.color = '';
+      walletBtn.style.borderColor = '';
+      walletConnected = false;
+    } else {
+      const addr = accounts[0];
+      walletBtn.textContent = addr.slice(0,6) + '…' + addr.slice(-4);
+      walletBtn.style.color = 'var(--forest)';
+      walletBtn.style.borderColor = 'var(--forest)';
+    }
+  });
+}
 </script>
 </body>
 </html>
