@@ -18,12 +18,7 @@ export default function BuyOptions() {
   const [quantity, setQuantity] = useState(1);
 
   const expiry = EXPIRIES[expiryIdx].ts;
-
-  const bs = useMemo(() =>
-    blackScholes({ spot: MOCK_SPOT, strike, expiry, vol: MOCK_VOL, isCall }),
-    [isCall, strike, expiry]
-  );
-
+  const bs = useMemo(() => blackScholes({ spot: MOCK_SPOT, strike, expiry, vol: MOCK_VOL, isCall }), [isCall, strike, expiry]);
   const totalPremium = bs.price * quantity;
   const tte = formatTimeToExpiry(expiry);
   const moneyness = ((MOCK_SPOT / strike - 1) * 100).toFixed(1);
@@ -31,75 +26,63 @@ export default function BuyOptions() {
     ? MOCK_SPOT > strike ? "ITM" : MOCK_SPOT < strike ? "OTM" : "ATM"
     : MOCK_SPOT < strike ? "ITM" : MOCK_SPOT > strike ? "OTM" : "ATM";
 
-  // Strike chain (option chain for selected expiry/type)
   const strikeChain = useMemo(() =>
     STRIKES.map((s) => {
       const b = blackScholes({ spot: MOCK_SPOT, strike: s, expiry, vol: MOCK_VOL, isCall });
       return { strike: s, premium: b.price, delta: b.delta, iv: MOCK_VOL };
-    }),
-    [isCall, expiry]
-  );
+    }), [isCall, expiry]);
 
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 600, letterSpacing: "-0.02em", margin: 0 }}>
-          Buy Options
+    <div style={{ maxWidth: 1000, margin: "0 auto" }} className="fade-in">
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontFamily: "var(--font-playfair, serif)", fontSize: 28, fontWeight: 700, color: "var(--forest)", letterSpacing: "-0.02em", margin: 0, lineHeight: 1.1 }}>
+          Trade Options
         </h1>
-        <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>
-          Premiums priced via on-chain Black-Scholes · Vol: {(MOCK_VOL * 100).toFixed(1)}% (cross-chain index)
+        <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 6 }}>
+          On-chain Black-Scholes pricing · IV: {(MOCK_VOL * 100).toFixed(1)}% (cross-chain index)
         </p>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 310px", gap: 18 }}>
         {/* Left: strike chain */}
         <div>
-          {/* Type + expiry selectors */}
-          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+          {/* Filters */}
+          <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
             {/* Call/Put toggle */}
-            <div style={{ display: "flex", background: "var(--bg-3)", borderRadius: 7, padding: 2, gap: 2 }}>
+            <div style={{ display: "flex", background: "var(--bg-3)", borderRadius: 9, padding: 3, gap: 2 }}>
               {[true, false].map((c) => (
-                <button
-                  key={String(c)}
-                  onClick={() => setIsCall(c)}
-                  style={{
-                    padding: "5px 16px",
-                    borderRadius: 5,
-                    border: "none",
-                    fontSize: 12,
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    background: isCall === c ? "white" : "transparent",
-                    color: isCall === c
-                      ? (c ? "var(--green)" : "var(--red)")
-                      : "var(--text-muted)",
-                    boxShadow: isCall === c ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-                    transition: "all 0.15s",
-                  }}
-                >
+                <button key={String(c)} onClick={() => setIsCall(c)} style={{
+                  padding: "5px 18px",
+                  borderRadius: 7,
+                  border: "none",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  background: isCall === c ? "var(--surface)" : "transparent",
+                  color: isCall === c ? (c ? "var(--green)" : "var(--red)") : "var(--text-muted)",
+                  boxShadow: isCall === c ? "0 1px 4px rgba(0,0,0,0.07)" : "none",
+                  transition: "all 0.15s",
+                  letterSpacing: "0.04em",
+                }}>
                   {c ? "CALL" : "PUT"}
                 </button>
               ))}
             </div>
 
-            {/* Expiry selector */}
+            {/* Expiry pills */}
             <div style={{ display: "flex", gap: 6 }}>
               {EXPIRIES.map((e, i) => (
-                <button
-                  key={e.label}
-                  onClick={() => setExpiryIdx(i)}
-                  style={{
-                    padding: "5px 12px",
-                    borderRadius: 5,
-                    border: `1px solid ${expiryIdx === i ? "var(--accent)" : "var(--border)"}`,
-                    fontSize: 11,
-                    fontWeight: expiryIdx === i ? 500 : 400,
-                    cursor: "pointer",
-                    background: expiryIdx === i ? "var(--accent)" : "white",
-                    color: expiryIdx === i ? "white" : "var(--text-secondary)",
-                    transition: "all 0.15s",
-                  }}
-                >
+                <button key={e.label} onClick={() => setExpiryIdx(i)} style={{
+                  padding: "5px 12px",
+                  borderRadius: 7,
+                  border: `1px solid ${expiryIdx === i ? "var(--forest)" : "var(--border)"}`,
+                  fontSize: 11,
+                  fontWeight: expiryIdx === i ? 500 : 400,
+                  cursor: "pointer",
+                  background: expiryIdx === i ? "var(--forest)" : "var(--surface)",
+                  color: expiryIdx === i ? "#f6f1ea" : "var(--text-secondary)",
+                  transition: "all 0.15s",
+                }}>
                   {e.label}
                 </button>
               ))}
@@ -108,13 +91,20 @@ export default function BuyOptions() {
 
           {/* Strike chain table */}
           <div className="card" style={{ overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
               <thead>
                 <tr style={{ background: "var(--bg-2)" }}>
                   {["Strike", "Premium", "Delta", "IV", ""].map((h) => (
-                    <th key={h} style={{ padding: "9px 16px", textAlign: h === "Strike" ? "left" : "right", fontSize: 10, fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid var(--border)" }}>
-                      {h}
-                    </th>
+                    <th key={h} style={{
+                      padding: "10px 20px",
+                      textAlign: h === "Strike" ? "left" : "right",
+                      fontSize: 10,
+                      fontWeight: 500,
+                      color: "var(--text-muted)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.07em",
+                      borderBottom: "1px solid var(--border)",
+                    }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -123,31 +113,27 @@ export default function BuyOptions() {
                   const isSelected = row.strike === strike;
                   const isAtm = Math.abs(row.strike - MOCK_SPOT) < 100;
                   return (
-                    <tr
-                      key={row.strike}
+                    <tr key={row.strike}
+                      onClick={() => setStrike(row.strike)}
                       style={{
                         borderBottom: i < strikeChain.length - 1 ? "1px solid var(--border)" : "none",
-                        background: isSelected ? "var(--bg-2)" : "white",
+                        background: isSelected ? "var(--forest-dim)" : "transparent",
                         cursor: "pointer",
+                        transition: "background 0.1s",
                       }}
-                      onClick={() => setStrike(row.strike)}
+                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "var(--bg-2)"; }}
+                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
                     >
-                      <td style={{ padding: "10px 16px", fontWeight: isAtm ? 600 : 400, fontFeatureSettings: '"tnum" 1' }}>
+                      <td style={{ padding: "11px 20px", fontWeight: isAtm ? 600 : 400, fontFeatureSettings: '"tnum" 1', color: isSelected ? "var(--forest)" : "var(--text-primary)" }}>
                         ${row.strike.toLocaleString()}
-                        {isAtm && <span style={{ marginLeft: 6, fontSize: 9, background: "var(--bg-3)", padding: "1px 5px", borderRadius: 3, color: "var(--text-muted)" }}>ATM</span>}
+                        {isAtm && <span style={{ marginLeft: 7, fontSize: 9, background: "var(--gold-bg)", color: "var(--gold)", padding: "1px 5px", borderRadius: 3, fontWeight: 600 }}>ATM</span>}
                       </td>
-                      <td style={{ padding: "10px 16px", textAlign: "right", fontWeight: 500, fontFeatureSettings: '"tnum" 1' }}>
-                        ${row.premium.toFixed(2)}
-                      </td>
-                      <td style={{ padding: "10px 16px", textAlign: "right", fontFeatureSettings: '"tnum" 1', color: "var(--text-secondary)" }}>
-                        {(row.delta * 100).toFixed(1)}
-                      </td>
-                      <td style={{ padding: "10px 16px", textAlign: "right", fontFeatureSettings: '"tnum" 1', color: "var(--text-secondary)" }}>
-                        {(row.iv * 100).toFixed(1)}%
-                      </td>
-                      <td style={{ padding: "10px 16px", textAlign: "right" }}>
+                      <td style={{ padding: "11px 20px", textAlign: "right", fontWeight: 500, fontFeatureSettings: '"tnum" 1', color: "var(--forest)" }}>${row.premium.toFixed(2)}</td>
+                      <td style={{ padding: "11px 20px", textAlign: "right", fontFeatureSettings: '"tnum" 1', color: "var(--text-secondary)" }}>{(row.delta * 100).toFixed(1)}</td>
+                      <td style={{ padding: "11px 20px", textAlign: "right", fontFeatureSettings: '"tnum" 1', color: "var(--text-muted)" }}>{(row.iv * 100).toFixed(1)}%</td>
+                      <td style={{ padding: "11px 20px", textAlign: "right" }}>
                         {isSelected && (
-                          <span style={{ fontSize: 10, background: "var(--accent)", color: "white", padding: "2px 7px", borderRadius: 3 }}>
+                          <span style={{ fontSize: 9.5, background: "var(--forest)", color: "#f6f1ea", padding: "2px 8px", borderRadius: 4 }}>
                             Selected
                           </span>
                         )}
@@ -161,35 +147,33 @@ export default function BuyOptions() {
         </div>
 
         {/* Right: order panel */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {/* Summary card */}
-          <div className="card" style={{ padding: 20 }}>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="card" style={{ padding: 22 }}>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14 }}>
               Order Summary
             </div>
 
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 18, fontWeight: 600, letterSpacing: "-0.02em" }}>
-                ETH-{strike.toLocaleString()}-{EXPIRIES[expiryIdx].label.replace(" ", "").replace(" ", "")}-{isCall ? "C" : "P"}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontFamily: "var(--font-playfair, serif)", fontSize: 16, fontWeight: 700, color: "var(--forest)", letterSpacing: "-0.01em" }}>
+                ETH-{strike.toLocaleString()}-{EXPIRIES[expiryIdx].label.replace(/ /g, "")}-{isCall ? "C" : "P"}
               </div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
                 European {isCall ? "Call" : "Put"} · Expires {tte}
               </div>
             </div>
 
-            <div style={{ background: "var(--bg-2)", borderRadius: 6, padding: "12px 14px", marginBottom: 14 }}>
+            {/* Stats */}
+            <div style={{ background: "var(--bg-2)", borderRadius: 8, padding: "12px 14px", marginBottom: 16 }}>
               <Row label="Spot" value={`$${MOCK_SPOT.toLocaleString("en-US", { minimumFractionDigits: 2 })}`} />
               <Row label="Strike" value={`$${strike.toLocaleString()}`} />
               <Row label="Moneyness" value={`${moneynessLabel} (${moneyness}%)`} />
-              <Row label="Vol (IV)" value={`${(MOCK_VOL * 100).toFixed(1)}%`} />
-              <Row label="Time to Expiry" value={tte} />
+              <Row label="IV" value={`${(MOCK_VOL * 100).toFixed(1)}%`} />
+              <Row label="Expires" value={tte} />
             </div>
 
             {/* Greeks */}
-            <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
-              Greeks
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>Greeks</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
               <Greek label="Δ Delta" value={(bs.delta * 100).toFixed(1)} />
               <Greek label="Γ Gamma" value={bs.gamma.toFixed(4)} />
               <Greek label="Θ Theta" value={`$${bs.theta.toFixed(2)}/d`} />
@@ -197,71 +181,67 @@ export default function BuyOptions() {
             </div>
 
             {/* Quantity */}
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 11, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
-                Quantity (contracts)
-              </label>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Quantity</label>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button onClick={() => setQuantity(Math.max(1, quantity - 1))} style={qBtnStyle}>−</button>
+                <button onClick={() => setQuantity(Math.max(1, quantity - 1))} style={qBtn}>−</button>
                 <input
-                  type="number"
-                  min={1}
-                  value={quantity}
+                  type="number" min={1} value={quantity}
                   onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                  style={{ flex: 1, padding: "7px 10px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 13, fontWeight: 500, textAlign: "center", fontFeatureSettings: '"tnum" 1' }}
+                  style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, fontSize: 14, fontWeight: 500, textAlign: "center", fontFeatureSettings: '"tnum" 1', background: "var(--surface)", color: "var(--text-primary)", outline: "none" }}
                 />
-                <button onClick={() => setQuantity(quantity + 1)} style={qBtnStyle}>+</button>
+                <button onClick={() => setQuantity(quantity + 1)} style={qBtn}>+</button>
               </div>
             </div>
 
-            {/* Premium total */}
-            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginBottom: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            {/* Total */}
+            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
                 <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Unit premium</span>
-                <span style={{ fontSize: 13, fontFeatureSettings: '"tnum" 1' }}>${bs.price.toFixed(2)}</span>
+                <span style={{ fontSize: 13, fontFeatureSettings: '"tnum" 1', color: "var(--text-secondary)" }}>${bs.price.toFixed(2)}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 500 }}>Total cost</span>
-                <span style={{ fontSize: 18, fontWeight: 600, letterSpacing: "-0.02em", fontFeatureSettings: '"tnum" 1' }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontSize: 12, fontWeight: 500 }}>Total</span>
+                <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: 22, fontWeight: 700, color: "var(--forest)", fontFeatureSettings: '"tnum" 1' }}>
                   ${totalPremium.toFixed(2)}
                 </span>
               </div>
-              <div style={{ fontSize: 10, color: "var(--text-muted)", textAlign: "right", marginTop: 2 }}>
-                + gas · Hook fee 0.3%
-              </div>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", textAlign: "right", marginTop: 2 }}>+ gas · Hook fee 0.3%</div>
             </div>
 
-            <button
-              style={{
-                width: "100%",
-                padding: "11px",
-                background: "var(--accent)",
-                color: "white",
-                border: "none",
-                borderRadius: 7,
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: "pointer",
-                letterSpacing: "0.01em",
-              }}
+            <button style={{
+              width: "100%",
+              padding: "12px",
+              background: "var(--forest)",
+              color: "#f6f1ea",
+              border: "none",
+              borderRadius: 9,
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+              letterSpacing: "0.02em",
+              transition: "opacity 0.15s",
+            }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+              onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
             >
               Buy {quantity} {isCall ? "Call" : "Put"}{quantity > 1 ? "s" : ""}
             </button>
 
-            <p style={{ fontSize: 10, color: "var(--text-muted)", textAlign: "center", margin: "10px 0 0", lineHeight: 1.5 }}>
-              Option token minted on purchase. Settlement automated by Reactive Network cron at expiry.
+            <p style={{ fontSize: 10, color: "var(--text-muted)", textAlign: "center", margin: "10px 0 0", lineHeight: 1.55 }}>
+              Option token minted on purchase. Settlement automated at expiry.
             </p>
           </div>
 
-          {/* Expected move */}
-          <div className="card" style={{ padding: 16 }}>
-            <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+          {/* Implied move */}
+          <div className="card" style={{ padding: "18px 22px" }}>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>
               Implied Move
             </div>
-            <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em" }}>
+            <div style={{ fontFamily: "var(--font-playfair, serif)", fontSize: 22, fontWeight: 700, color: "var(--forest)" }}>
               ±{bs.impliedMovePercent.toFixed(1)}%
             </div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
               1σ move by expiry · ${(MOCK_SPOT * bs.impliedMovePercent / 100).toFixed(0)} range
             </div>
           </div>
@@ -282,23 +262,24 @@ function Row({ label, value }: { label: string; value: string }) {
 
 function Greek({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ background: "var(--bg-2)", borderRadius: 5, padding: "8px 10px" }}>
-      <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 12, fontWeight: 500, fontFeatureSettings: '"tnum" 1' }}>{value}</div>
+    <div style={{ background: "var(--bg-2)", borderRadius: 7, padding: "9px 11px" }}>
+      <div style={{ fontSize: 9.5, color: "var(--text-muted)", marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 12.5, fontWeight: 500, fontFeatureSettings: '"tnum" 1', color: "var(--forest)" }}>{value}</div>
     </div>
   );
 }
 
-const qBtnStyle: React.CSSProperties = {
-  width: 32,
-  height: 32,
+const qBtn: React.CSSProperties = {
+  width: 34,
+  height: 34,
   border: "1px solid var(--border)",
-  borderRadius: 6,
-  background: "white",
+  borderRadius: 8,
+  background: "var(--surface)",
   cursor: "pointer",
-  fontSize: 16,
+  fontSize: 17,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   flexShrink: 0,
+  color: "var(--text-primary)",
 };

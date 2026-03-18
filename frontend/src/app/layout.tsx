@@ -1,7 +1,20 @@
 import type { Metadata } from "next";
+import { Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
+
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-playfair",
+  display: "swap",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Voltaire — Cross-Chain Options AMM",
@@ -9,19 +22,15 @@ export const metadata: Metadata = {
     "European options trading on Uniswap V4. On-chain Black-Scholes pricing powered by Reactive Network cross-chain volatility.",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${playfair.variable} ${inter.variable}`}>
       <body>
-        <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg)" }}>
+        <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--bg)" }}>
           <Sidebar />
-          <div className="flex flex-col flex-1 overflow-hidden">
+          <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
             <TopBar />
-            <main className="flex-1 overflow-y-auto p-6">
+            <main style={{ flex: 1, overflowY: "auto", padding: "32px 36px" }}>
               {children}
             </main>
           </div>

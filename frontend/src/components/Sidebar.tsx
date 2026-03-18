@@ -6,22 +6,22 @@ import { usePathname } from "next/navigation";
 const NAV = [
   {
     href: "/",
-    label: "Dashboard",
+    label: "Overview",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <rect x="1" y="1" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.2" />
-        <rect x="9" y="1" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.2" />
-        <rect x="1" y="9" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.2" />
-        <rect x="9" y="9" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.2" />
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+        <rect x="1" y="1" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.1" />
+        <rect x="8.5" y="1" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.1" />
+        <rect x="1" y="8.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.1" />
+        <rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.1" />
       </svg>
     ),
   },
   {
     href: "/buy",
-    label: "Buy Options",
+    label: "Trade",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+        <path d="M7.5 2v11M2 7.5h11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
       </svg>
     ),
   },
@@ -29,10 +29,9 @@ const NAV = [
     href: "/vault",
     label: "Vault",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <rect x="1.5" y="3.5" width="13" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
-        <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.2" />
-        <path d="M1.5 6h13" stroke="currentColor" strokeWidth="1.2" />
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+        <rect x="1.5" y="3" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.1" />
+        <circle cx="7.5" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.1" />
       </svg>
     ),
   },
@@ -40,8 +39,8 @@ const NAV = [
     href: "/portfolio",
     label: "Portfolio",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M2 12L6 7l3 3 5-6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+        <path d="M2 11L5.5 7l3 2.5L13 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
   },
@@ -51,39 +50,44 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside
-      style={{
-        width: 200,
-        minWidth: 200,
-        background: "white",
-        borderRight: "1px solid var(--border)",
-        display: "flex",
-        flexDirection: "column",
-        padding: "0",
-      }}
-    >
+    <aside style={{
+      width: 220,
+      minWidth: 220,
+      background: "var(--surface)",
+      borderRight: "1px solid var(--border)",
+      display: "flex",
+      flexDirection: "column",
+    }}>
       {/* Logo */}
-      <div
-        style={{
-          padding: "20px 20px 16px",
-          borderBottom: "1px solid var(--border)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ padding: "28px 24px 22px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <VoltaireLogo />
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--text-primary)" }}>
+            <div style={{
+              fontFamily: "var(--font-playfair, serif)",
+              fontSize: 16,
+              fontWeight: 700,
+              color: "var(--forest)",
+              letterSpacing: "-0.01em",
+              lineHeight: 1.1,
+            }}>
               Voltaire
             </div>
-            <div style={{ fontSize: 10, color: "var(--text-muted)", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+            <div style={{ fontSize: 9.5, color: "var(--text-muted)", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 2 }}>
               Options AMM
             </div>
           </div>
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav style={{ padding: "12px 8px", flex: 1 }}>
+      {/* Divider */}
+      <div style={{ height: 1, background: "var(--border)", margin: "0 16px" }} />
+
+      {/* Nav */}
+      <nav style={{ padding: "16px 12px", flex: 1 }}>
+        <div style={{ fontSize: 9.5, color: "var(--text-muted)", letterSpacing: "0.1em", textTransform: "uppercase", padding: "0 12px", marginBottom: 8 }}>
+          Menu
+        </div>
         {NAV.map((item) => {
           const active = pathname === item.href;
           return (
@@ -94,18 +98,21 @@ export default function Sidebar() {
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
-                padding: "8px 12px",
-                borderRadius: 6,
+                padding: "9px 12px",
+                borderRadius: 8,
                 fontSize: 13,
                 fontWeight: active ? 500 : 400,
-                color: active ? "var(--text-primary)" : "var(--text-secondary)",
-                background: active ? "var(--bg-2)" : "transparent",
+                color: active ? "var(--forest)" : "var(--text-secondary)",
+                background: active ? "var(--forest-dim)" : "transparent",
                 textDecoration: "none",
                 marginBottom: 2,
-                transition: "background 0.1s, color 0.1s",
+                transition: "all 0.15s ease",
+                border: active ? "1px solid var(--forest-mid)" : "1px solid transparent",
               }}
             >
-              <span style={{ opacity: active ? 1 : 0.6 }}>{item.icon}</span>
+              <span style={{ opacity: active ? 1 : 0.55, color: active ? "var(--forest)" : "currentColor" }}>
+                {item.icon}
+              </span>
               {item.label}
             </Link>
           );
@@ -113,53 +120,45 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div
-        style={{
-          padding: "12px 20px 16px",
-          borderTop: "1px solid var(--border)",
-        }}
-      >
-        <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4 }}>
-          Powered by
+      <div style={{ padding: "16px 24px 24px", borderTop: "1px solid var(--border)" }}>
+        <div style={{ fontSize: 9.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
+          Built on
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <Badge label="Reactive Network" color="#6B21A8" />
-          <Badge label="Uniswap V4" color="#FF007A" />
-          <Badge label="Unichain" color="#F5A623" />
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <PoweredBadge label="Uniswap V4" dot="#FF007A" />
+          <PoweredBadge label="Unichain" dot="#F5A623" />
+          <PoweredBadge label="Reactive Network" dot="#6366f1" />
         </div>
       </div>
     </aside>
   );
 }
 
-function Badge({ label, color }: { label: string; color: string }) {
+function PoweredBadge({ label, dot }: { label: string; dot: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-      <div style={{ width: 5, height: 5, borderRadius: "50%", background: color }} />
-      <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{label}</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+      <div style={{ width: 5, height: 5, borderRadius: "50%", background: dot, flexShrink: 0 }} />
+      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{label}</span>
     </div>
   );
 }
 
 function VoltaireLogo() {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-      <rect width="24" height="24" rx="5" fill="#111" />
-      <path
-        d="M6 7l3 5 3-5 3 5 3-5"
-        stroke="white"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M6 13l6 4 6-4"
-        stroke="white"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.5"
-      />
-    </svg>
+    <div style={{
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      background: "var(--forest)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    }}>
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <path d="M3 5l3 4 3-4 3 4 3-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M3 10l6 3 6-3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.45" />
+      </svg>
+    </div>
   );
 }

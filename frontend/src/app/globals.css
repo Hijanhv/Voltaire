@@ -1,30 +1,31 @@
 @import "tailwindcss";
 
-/* ─── Voltaire Design System — Dieter Rams inspired ─── */
+/* ─── Voltaire Design System — Editorial / Wavelength-inspired ─── */
 :root {
-  --bg: #fafafa;
-  --bg-2: #f4f4f4;
-  --bg-3: #ebebeb;
-  --border: #e0e0e0;
-  --border-strong: #c8c8c8;
-  --text-primary: #111111;
-  --text-secondary: #555555;
-  --text-muted: #999999;
-  --accent: #1a1a1a;
-  --accent-hover: #333333;
-  --green: #1a7a3f;
-  --green-bg: #f0faf4;
-  --red: #9b1c1c;
-  --red-bg: #fff5f5;
-  --blue: #1e3a5f;
-  --blue-bg: #f0f4fa;
+  --bg:           #f6f1ea;
+  --bg-2:         #efe9df;
+  --bg-3:         #e5ddd1;
+  --surface:      #faf7f2;
+  --border:       rgba(44, 72, 57, 0.12);
+  --border-strong:rgba(44, 72, 57, 0.25);
+
+  --forest:       #2c4839;
+  --forest-dim:   rgba(44, 72, 57, 0.08);
+  --forest-mid:   rgba(44, 72, 57, 0.15);
+
+  --text-primary:   #1a1a1a;
+  --text-secondary: #4a4a4a;
+  --text-muted:     #8a8278;
+
+  --green:    #2d6a4f;
+  --green-bg: rgba(45, 106, 79, 0.08);
+  --red:      #9b3a2a;
+  --red-bg:   rgba(155, 58, 42, 0.07);
+  --gold:     #a07d3a;
+  --gold-bg:  rgba(160, 125, 58, 0.08);
 }
 
-* {
-  box-sizing: border-box;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+*, *::before, *::after { box-sizing: border-box; }
 
 html {
   font-size: 14px;
@@ -34,29 +35,40 @@ html {
 body {
   background: var(--bg);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
-    Arial, sans-serif;
-  font-feature-settings: "tnum" 1, "ss01" 1;
+  font-family: var(--font-inter, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Tabular numbers everywhere in financial data */
-.tabnum {
-  font-feature-settings: "tnum" 1;
+.font-serif {
+  font-family: var(--font-playfair, Georgia, "Times New Roman", serif);
 }
 
-/* Hairline dividers */
-.divider {
-  border-top: 1px solid var(--border);
-}
-
-/* Card */
 .card {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
 }
 
-/* Scrollbar */
+.card-flat {
+  background: var(--bg-2);
+  border-radius: 10px;
+}
+
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fade-in 0.4s ease forwards;
+}
