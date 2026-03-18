@@ -1,10 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useConnection, useWriteContract } from "wagmi";
 import { MOCK_SPOT, MOCK_VOL, MOCK_PORTFOLIO, formatTimeToExpiry } from "@/lib/mockData";
 import { blackScholes } from "@/lib/blackScholes";
+import { CONTRACTS, HOOK_ABI } from "@/lib/config";
 
 export default function Portfolio() {
+  const [claimState, setClaimState] = useState<"idle" | "pending" | "done" | "error">("idle");
+
+  const connection = useConnection();
+  const isConnected = connection?.status === "connected";
+  const { mutateAsync: sendTx } = useWriteContract();
+
   const positions = useMemo(() =>
     MOCK_PORTFOLIO.map((p) => {
       const bs = blackScholes({ spot: MOCK_SPOT, strike: p.strike, expiry: p.expiry, vol: MOCK_VOL, isCall: p.isCall });
@@ -21,6 +29,25 @@ export default function Portfolio() {
   const totalValue = positions.reduce((a, p) => a + p.currentValue, 0);
   const totalPnl = totalValue - totalCost;
   const totalPnlPct = (totalPnl / totalCost) * 100;
+
+  async function handleClaim() {
+    if (!isConnected) { alert("Connect your wallet first."); return; }
+    try {
+      setClaimState("pending");
+      // seriesId 0 as example — in production this would iterate expired positions
+      await sendTx({
+        address: CONTRACTS.optionsHook,
+        abi: HOOK_ABI,
+        functionName: "claimSettlement",
+        args: [BigInt(0)],
+      });
+      setClaimState("done");
+      setTimeout(() => setClaimState("idle"), 4000);
+    } catch {
+      setClaimState("error");
+      setTimeout(() => setClaimState("idle"), 3000);
+    }
+  }
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto" }} className="fade-in">
@@ -116,22 +143,40 @@ export default function Portfolio() {
             claimSettlement(seriesId)
           </code>.
         </p>
-        <button style={{
-          marginTop: 14,
-          padding: "8px 18px",
-          border: "1px solid var(--forest)",
-          borderRadius: 8,
-          background: "transparent",
-          color: "var(--forest)",
-          fontSize: 12,
-          fontWeight: 500,
-          cursor: "pointer",
-          transition: "all 0.15s",
-        }}
-          onMouseEnter={e => { e.currentTarget.style.background = "var(--forest)"; e.currentTarget.style.color = "#f6f1ea"; }}
-          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--forest)"; }}
+
+        {claimState !== "idle" && (
+          <div style={{
+            marginTop: 12,
+            padding: "9px 12px",
+            borderRadius: 8,
+            fontSize: 11,
+            fontWeight: 500,
+            background: claimState === "done" ? "var(--green-bg)" : claimState === "error" ? "rgba(155,58,42,0.08)" : "rgba(44,72,57,0.08)",
+            color: claimState === "done" ? "var(--green)" : claimState === "error" ? "var(--red)" : "var(--forest)",
+          }}>
+            {claimState === "pending" ? "Claiming settlement…" : claimState === "done" ? "Settlement claimed!" : "Claim failed — try again."}
+          </div>
+        )}
+
+        <button
+          onClick={handleClaim}
+          disabled={claimState === "pending"}
+          style={{
+            marginTop: 14,
+            padding: "8px 18px",
+            border: "1px solid var(--forest)",
+            borderRadius: 8,
+            background: claimState === "pending" ? "var(--forest-dim)" : "transparent",
+            color: "var(--forest)",
+            fontSize: 12,
+            fontWeight: 500,
+            cursor: claimState === "pending" ? "not-allowed" : "pointer",
+            transition: "all 0.15s",
+          }}
+          onMouseEnter={e => { if (claimState !== "pending") { e.currentTarget.style.background = "var(--forest)"; e.currentTarget.style.color = "#f6f1ea"; } }}
+          onMouseLeave={e => { e.currentTarget.style.background = claimState === "pending" ? "var(--forest-dim)" : "transparent"; e.currentTarget.style.color = "var(--forest)"; }}
         >
-          Claim Expired Positions
+          {claimState === "pending" ? "Claiming…" : "Claim Expired Positions"}
         </button>
       </div>
     </div>

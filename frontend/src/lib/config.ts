@@ -1,14 +1,29 @@
 import { http, createConfig } from "wagmi";
-import { unichain } from "wagmi/chains";
+import { injected } from "wagmi/connectors";
+import { defineChain } from "viem";
+
+export const unichainSepolia = defineChain({
+  id: 1301,
+  name: "Unichain Sepolia",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: {
+    default: { http: ["https://sepolia.unichain.org"] },
+  },
+  blockExplorers: {
+    default: { name: "Uniscan", url: "https://sepolia.uniscan.xyz" },
+  },
+  testnet: true,
+});
 
 export const config = createConfig({
-  chains: [unichain],
+  chains: [unichainSepolia],
+  connectors: [injected()],
   transports: {
-    [unichain.id]: http(),
+    [unichainSepolia.id]: http(),
   },
 });
 
-// Deployed contract addresses (update after deployment)
+// Deployed contract addresses on Unichain Sepolia
 export const CONTRACTS = {
   optionsHook: "0xdF4d01D6fc9E28940AB3Baecc3CFCd6689a9e815" as `0x${string}`,
   optionSeries: "0xD9b5413fe685e1D5d7C9960726fd4986A9EFcbC8" as `0x${string}`,
@@ -17,6 +32,53 @@ export const CONTRACTS = {
   usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85" as `0x${string}`,
   weth: "0x4200000000000000000000000000000000000006" as `0x${string}`,
 };
+
+// Minimal ABIs for contract interactions
+export const VAULT_ABI = [
+  {
+    name: "deposit",
+    type: "function",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "withdraw",
+    type: "function",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "shares", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+export const HOOK_ABI = [
+  {
+    name: "claimSettlement",
+    type: "function",
+    inputs: [{ name: "seriesId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+export const ERC20_ABI = [
+  {
+    name: "approve",
+    type: "function",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "nonpayable",
+  },
+] as const;
 
 // Option expiry timestamps
 export const EXPIRIES = {

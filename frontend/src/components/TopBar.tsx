@@ -1,9 +1,18 @@
 "use client";
 
+import { useConnection, useConnect, useDisconnect } from "wagmi";
+import { injected } from "wagmi/connectors";
 import { MOCK_SPOT, MOCK_VOL } from "@/lib/mockData";
 
 export default function TopBar() {
   const volPct = (MOCK_VOL * 100).toFixed(1);
+  const connection = useConnection();
+  const { mutate: connect } = useConnect();
+  const { mutate: disconnect } = useDisconnect();
+
+  const address = connection?.address;
+  const isConnected = connection?.status === "connected";
+  const shortAddr = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
 
   return (
     <header style={{
@@ -33,24 +42,62 @@ export default function TopBar() {
         </div>
       </div>
 
-      {/* Right */}
-      <button style={{
-        padding: "7px 18px",
-        background: "var(--forest)",
-        color: "#f6f1ea",
-        border: "none",
-        borderRadius: 8,
-        fontSize: 12,
-        fontWeight: 500,
-        cursor: "pointer",
-        letterSpacing: "0.02em",
-        transition: "opacity 0.15s",
-      }}
-        onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
-        onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-      >
-        Connect Wallet
-      </button>
+      {/* Right: wallet */}
+      {isConnected ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 7,
+            padding: "6px 14px",
+            background: "var(--forest-dim)",
+            border: "1px solid var(--forest-mid)",
+            borderRadius: 8,
+            fontSize: 12,
+            color: "var(--forest)",
+            fontWeight: 500,
+            fontFeatureSettings: '"tnum" 1',
+          }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)" }} />
+            {shortAddr}
+          </div>
+          <button
+            onClick={() => disconnect()}
+            style={{
+              padding: "6px 14px",
+              background: "transparent",
+              color: "var(--text-muted)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              fontSize: 12,
+              cursor: "pointer",
+              transition: "all 0.15s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--red)"; e.currentTarget.style.color = "var(--red)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)"; }}
+          >
+            Disconnect
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => connect({ connector: injected() })}
+          style={{
+            padding: "7px 18px",
+            background: "var(--forest)",
+            color: "#f6f1ea",
+            border: "none",
+            borderRadius: 8,
+            fontSize: 12,
+            fontWeight: 500,
+            cursor: "pointer",
+            letterSpacing: "0.02em",
+            transition: "opacity 0.15s",
+          }}
+          onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+          onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+        >
+          Connect Wallet
+        </button>
+      )}
     </header>
   );
 }

@@ -3,6 +3,7 @@ import { Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
+import Providers from "./providers";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${playfair.variable} ${inter.variable}`}>
       <body>
         <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--bg)" }}>
+          <Providers>
           <Sidebar />
           <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
             <TopBar />
@@ -34,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {children}
             </main>
           </div>
+        </Providers>
         </div>
       </body>
     </html>
