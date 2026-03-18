@@ -507,20 +507,6 @@ You have idle USDC and want to earn yield.
 
 Risk: if many options expire in-the-money in the same period, vault NAV decreases.
 
-### As an AI Agent (x402)
-
-Voltaire supports the x402 machine-payment protocol. An AI agent can buy options with zero human involvement:
-
-```
-Agent ──▶ GET /api/v1/options/quote?strike=3400&expiry=MAR26&type=call
-       ◀── HTTP 402: Pay 142.30 USDC to 0xD9789F...
-       ──▶ broadcast USDC tx on-chain
-       ◀── ETH-3400-MAR26-C token in agent wallet
-       ... [at expiry, auto-settled by Reactive]
-       ──▶ claimSettlement()
-       ◀── USDC payout
-```
-
 ---
 
 ## Real-World Use Cases
@@ -801,7 +787,6 @@ voltaire/
 - [BeforeSwapDelta Spec](https://docs.uniswap.org/contracts/v4/concepts/hooks/before-swap-return-delta)
 - [Reactive Network Docs](https://docs.reactive.network)
 - [Black-Scholes Model](https://en.wikipedia.org/wiki/Black%E2%80%93Scholes_model)
-- [x402 Protocol](https://x402.org)
 - [Options Trading — Investopedia](https://www.investopedia.com/options-basics-tutorial-4583012)
 
 ---
@@ -826,7 +811,7 @@ voltaire/
 
 <div align="center">
 
-Built on Unichain · Reactive Network · x402
+Built on Unichain · Reactive Network
 
 *"Options were always a good idea. Real-time cross-chain vol just made them viable."*
 
