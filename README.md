@@ -11,8 +11,12 @@
 [![Foundry](https://img.shields.io/badge/Built%20with-Foundry-FFDB1C)](https://getfoundry.sh)
 [![Tests](https://img.shields.io/badge/Tests-112%20passing-brightgreen)]()
 [![Testnet](https://img.shields.io/badge/Deployed-Unichain%20Sepolia-8b5cf6)](https://sepolia.uniscan.xyz)
+[![Landing](https://img.shields.io/badge/Landing-voltaire--home.vercel.app-black)](https://voltaire-home.vercel.app)
+[![App](https://img.shields.io/badge/App-voltaire--app.vercel.app-black)](https://voltaire-app.vercel.app)
 
 [What is This?](#what-is-voltaire) · [The Problem](#the-problem) · [How It Works](#how-it-works) · [Live Contracts](#live-on-testnet) · [What I Learned](#what-i-learned-building-this)
+
+**Live:** [voltaire-home.vercel.app](https://voltaire-home.vercel.app) · [voltaire-app.vercel.app](https://voltaire-app.vercel.app)
 
 </div>
 
