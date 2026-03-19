@@ -29,7 +29,7 @@ export const CONTRACTS = {
   optionSeries: "0xD9b5413fe685e1D5d7C9960726fd4986A9EFcbC8" as `0x${string}`,
   collateralVault: "0xbD0F937f4ec7a4584aC5535655E4245842Cf2fF7" as `0x${string}`,
   volOracle: "0x60E045da4c55778d1F56cD13550F901E0C0C7b11" as `0x${string}`,
-  usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85" as `0x${string}`,
+  usdc: "0x31d0220469e10c4E71834a79b1f276d740d3768F" as `0x${string}`,
   weth: "0x4200000000000000000000000000000000000006" as `0x${string}`,
 };
 
@@ -88,5 +88,3 @@ export const EXPIRIES = {
   "JUN-26": new Date("2026-06-27").getTime() / 1000,
 };
 
-// Strike grid (USD)
-export const STRIKES = [2800, 3000, 3200, 3400, 3600, 3800, 4000, 4200, 4500];

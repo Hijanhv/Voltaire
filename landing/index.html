@@ -1327,7 +1327,7 @@ function updatePricer() {
   ctx.lineWidth=1; ctx.setLineDash([3,3]);
   ctx.beginPath(); ctx.moveTo(strikeX,pad); ctx.lineTo(strikeX,H-pad); ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle='var(--gold)';
+  ctx.fillStyle='#a07d3a';
   ctx.font='10px Inter,sans-serif'; ctx.textAlign='center';
   ctx.fillText('Strike $'+K.toLocaleString(),strikeX,H-6);
 }
@@ -1380,7 +1380,7 @@ if (walletBtn) {
 }
 
 // Auto-update if user already connected
-if (window.ethereum) {
+if (window.ethereum && walletBtn) {
   window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
     if (accounts.length > 0) {
       const addr = accounts[0];
@@ -1391,6 +1391,7 @@ if (window.ethereum) {
     }
   });
   window.ethereum.on('accountsChanged', accounts => {
+    if (!walletBtn) return;
     if (accounts.length === 0) {
       walletBtn.textContent = 'Connect Wallet';
       walletBtn.style.color = '';

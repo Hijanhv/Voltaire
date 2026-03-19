@@ -11,7 +11,7 @@ export default function Portfolio() {
 
   const connection = useConnection();
   const isConnected = connection?.status === "connected";
-  const { mutateAsync: sendTx } = useWriteContract();
+  const { writeContractAsync: sendTx } = useWriteContract();
 
   const positions = useMemo(() =>
     MOCK_PORTFOLIO.map((p) => {

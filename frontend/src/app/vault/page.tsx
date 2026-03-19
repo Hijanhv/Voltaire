@@ -30,7 +30,7 @@ export default function Vault() {
 
   const connection = useConnection();
   const isConnected = connection?.status === "connected";
-  const { mutateAsync: sendTx } = useWriteContract();
+  const { writeContractAsync: sendTx } = useWriteContract();
 
   const utilPct = (MOCK_VAULT.utilized / MOCK_VAULT.totalCollateral) * 100;
   const available = MOCK_VAULT.totalCollateral - MOCK_VAULT.utilized;

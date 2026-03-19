@@ -31,7 +31,7 @@ export default function BuyOptions() {
 
   const connection = useConnection();
   const isConnected = connection?.status === "connected";
-  const { mutateAsync: sendTx } = useWriteContract();
+  const { writeContractAsync: sendTx } = useWriteContract();
 
   const expiry = EXPIRIES[expiryIdx].ts;
   const bs = useMemo(() => blackScholes({ spot: MOCK_SPOT, strike, expiry, vol: MOCK_VOL, isCall }), [isCall, strike, expiry]);

@@ -7,8 +7,8 @@ import { MOCK_SPOT, MOCK_VOL } from "@/lib/mockData";
 export default function TopBar() {
   const volPct = (MOCK_VOL * 100).toFixed(1);
   const connection = useConnection();
-  const { mutate: connect } = useConnect();
-  const { mutate: disconnect } = useDisconnect();
+  const { connect } = useConnect();
+  const { disconnect } = useDisconnect();
 
   const address = connection?.address;
   const isConnected = connection?.status === "connected";
