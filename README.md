@@ -11,12 +11,12 @@
 [![Foundry](https://img.shields.io/badge/Built%20with-Foundry-FFDB1C)](https://getfoundry.sh)
 [![Tests](https://img.shields.io/badge/Tests-112%20passing-brightgreen)]()
 [![Testnet](https://img.shields.io/badge/Deployed-Unichain%20Sepolia-8b5cf6)](https://sepolia.uniscan.xyz)
-[![Landing](https://img.shields.io/badge/Landing-voltaire--home.vercel.app-black)](https://voltaire-home.vercel.app)
-[![App](https://img.shields.io/badge/App-voltaire--app.vercel.app-black)](https://voltaire-app.vercel.app)
+[![Landing](https://img.shields.io/badge/Landing-voltaire--landing-black)](https://voltaire-landing-janhavi-chavadas-projects.vercel.app)
+[![App](https://img.shields.io/badge/App-voltaire--app-black)](https://voltaire-app-janhavi-chavadas-projects.vercel.app)
 
 [What is This?](#what-is-voltaire) · [The Problem](#the-problem) · [How It Works](#how-it-works) · [Live Contracts](#live-on-testnet) · [What I Learned](#what-i-learned-building-this)
 
-**Live:** [voltaire-home.vercel.app](https://voltaire-home.vercel.app) · [voltaire-app.vercel.app](https://voltaire-app.vercel.app)
+**Live:** [voltaire-landing-janhavi-chavadas-projects.vercel.app](https://voltaire-landing-janhavi-chavadas-projects.vercel.app) · [voltaire-app-janhavi-chavadas-projects.vercel.app](https://voltaire-app-janhavi-chavadas-projects.vercel.app)
 
 </div>
 
@@ -204,6 +204,7 @@ The hook is like a plugin that runs **before every swap**, decides what to do, a
 ║  ┌─────────────────────────────────────────────────────────────────┐  ║
 ║  │                      BlackScholes.sol                           │  ║
 ║  │  • Pure Solidity math library (no external calls)               │  ║
+║  │  • Full BS formula with e^(-rT) strike discounting (r=5%)       │  ║
 ║  │  • price(S, K, t, σ, isCall) → premium in WAD                  │  ║
 ║  │  • lnWad, expWad, sqrt, normcdf — all on-chain                  │  ║
 ║  └──────────────────────────────┬──────────────────────────────────┘  ║
@@ -214,7 +215,9 @@ The hook is like a plugin that runs **before every swap**, decides what to do, a
 ║  │                                                                 │  ║
 ║  │  beforeSwap() ──── intercepts every swap                        │  ║
 ║  │       │                                                         │  ║
-║  │       ├── prices option via Black-Scholes                       │  ║
+║  │       ├── reads spot via V4 StateLibrary.getSlot0               │  ║
+║  │       ├── reads σ from oracle, applies 1.15× IV multiplier      │  ║
+║  │       ├── prices option via Black-Scholes (with discounting)     │  ║
 ║  │       ├── checks vault liquidity                                │  ║
 ║  │       ├── mints ERC20 option token                              │  ║
 ║  │       ├── locks collateral                                      │  ║
@@ -490,15 +493,15 @@ EXAMPLE: 30-day ETH call option, strike $3,200, spot $3,000
 ┌──────────────────────────┬───────────────────────────┬────────────────────────────┐
 │ Metric                   │ Traditional (e.g. Deribit) │ Voltaire                   │
 ├──────────────────────────┼───────────────────────────┼────────────────────────────┤
-│ Volatility input         │ Implied vol 80%           │ Realized vol 68%           │
-│                          │ (includes MM spread)      │ (live cross-chain oracle)  │
+│ Volatility input         │ Implied vol 80%           │ Oracle RV 68% × 1.15 = 78% │
+│                          │ (includes MM spread)      │ (live 4-chain realized vol) │
 ├──────────────────────────┼───────────────────────────┼────────────────────────────┤
-│ Calculated premium       │ $194.50                   │ $152.30                    │
-│ (Black-Scholes)          │ BS(3000, 3200, 30d, 80%)  │ BS(3000, 3200, 30d, 68%)   │
+│ Calculated premium       │ $194.50                   │ $174.80                    │
+│ (Black-Scholes + e^-rT)  │ BS(3000,3200,30d,80%,5%)  │ BS(3000,3200,30d,78%,5%)   │
 ├──────────────────────────┼───────────────────────────┼────────────────────────────┤
 │ Gas cost                 │ ~$18 (Ethereum mainnet)   │ ~$0.01 (Unichain)          │
 ├──────────────────────────┼───────────────────────────┼────────────────────────────┤
-│ Total cost to buyer      │ ~$212.50                  │ ~$152.31                   │
+│ Total cost to buyer      │ ~$212.50                  │ ~$174.81                   │
 ├──────────────────────────┼───────────────────────────┼────────────────────────────┤
 │ Settlement               │ Keeper bot (can fail)     │ Reactive cron (automatic)  │
 ├──────────────────────────┼───────────────────────────┼────────────────────────────┤
@@ -509,8 +512,10 @@ EXAMPLE: 30-day ETH call option, strike $3,200, spot $3,000
 │ Counterparty risk        │ Exchange team / protocol  │ Smart contract only        │
 └──────────────────────────┴───────────────────────────┴────────────────────────────┘
 
-You save: $60.19 per contract = 28.3% cheaper
-(Figures computed with live oracle vol — the dashboard shows real-time calculations)
+You save: $37.69 per contract = 17.7% cheaper on premium alone, ~$55.69 total (26.2%)
+Voltaire applies a 1.15× IV multiplier to realized vol (bridges the RV→IV gap) and
+uses the full Black-Scholes formula with e^(-rT) discounting. Figures shown with live
+oracle vol — the dashboard computes and displays these in real time.
 ```
 
 ---
@@ -553,7 +558,7 @@ Voltaire is deployed and live across two networks — the core protocol on **Uni
 
 **What the RSCs do:**
 - `ReactiveVolatilityRelayer` — watches ETH/USDC V3 pools on 4 chains, computes weighted realized volatility every ~12 swaps, calls `updateVolatility()` on the oracle
-- `ReactiveExpirySettler` — registers every new option series, monitors expiry timestamps, automatically calls `settleExpiredSeries()` when a series expires — no keeper bots needed
+- `ReactiveExpirySettler` — registers every new option series, monitors expiry timestamps, automatically calls `settleExpiredSeries()` when a series expires — no keeper bots needed. Uses swap-and-pop to keep the pending series array bounded (O(1) removal, no unbounded gas growth)
 
 **Deployer:** `0x9978E5462E76F86925eF6471B8af61A654B598Ab`
 
@@ -630,7 +635,7 @@ Risk: if many options expire in-the-money in the same period, vault NAV decrease
 | Protocol fee | 0.3% |
 | Core protocol network | Unichain Sepolia (Chain ID 1301) |
 | Reactive contracts network | Lasna testnet (Chain ID 5318007) |
-| Premium savings vs traditional | ~28% (no IV markup, Unichain gas) |
+| Premium savings vs traditional | ~18% on premium + $18 gas savings = ~26% total |
 
 ---
 
@@ -794,6 +799,14 @@ Uniswap V4 encodes hook permissions in the deployed contract address. For Voltai
 
 Option buyer cost basis is not tracked on-chain (no purchase events stored). The portfolio page shows current value vs purchase price placeholder. A subgraph or event indexer would provide accurate P&L.
 
+### Call Collateral Cap
+
+For call options, the vault locks `spot` as collateral per contract. The true max payout for a call is unbounded (spot could theoretically go to infinity), so in production a time-weighted cap or overcollateralization factor should replace the current spot-based estimate.
+
+### Premium Token Transfer (BeforeSwapDelta)
+
+`BeforeSwapDelta` tells the V4 PoolManager to debit the premium from the swapper's input. The vault credit path relies on the pool settling the delta correctly — this works in the test harness but would require thorough integration testing against a live V4 pool before production use.
+
 ---
 
 ## For Developers
@@ -805,12 +818,14 @@ Option buyer cost basis is not tracked on-chain (no purchase events stored). The
 
 | Contract | Purpose |
 |---|---|
-| `OptionsHook.sol` | Uniswap V4 hook: `beforeSwap` intercept, option pricing, settlement, admin |
-| `BlackScholes.sol` | Pure library: WAD fixed-point BS, normcdf, lnWad, expWad |
-| `VolatilityOracle.sol` | Cross-chain vol store: ring buffer of 48 observations, staleness revert |
+| `OptionsHook.sol` | Uniswap V4 hook: reads live spot via `StateLibrary.getSlot0`, applies 1.15× IV multiplier to oracle vol, prices via Black-Scholes, mints option tokens, settles at expiry |
+| `BlackScholes.sol` | Pure library: full BS with `e^(-rT)` strike discounting (5% risk-free), normcdf, lnWad, expWad, all WAD fixed-point |
+| `VolatilityOracle.sol` | Cross-chain vol store: ring buffer of 48 observations, staleness revert after 1 hour |
 | `OptionSeries.sol` | Series registry: create, mint, burn, settle; deploys one ERC20 per series |
 | `OptionToken.sol` | Minimal ERC20 per series (e.g. `ETH-3400-MAR26-C`) |
 | `CollateralVault.sol` | Share-based USDC vault: lock, receivePremium, paySettlement |
+| `ReactiveVolatilityRelayer.sol` | RSC on Lasna: subscribes to V3 Swap events on 4 chains, aggregates realized vol, pushes to oracle |
+| `ReactiveExpirySettler.sol` | RSC on Lasna: tracks series expiries, swap-and-pop array for O(1) gas, emits settlement callbacks |
 
 ### Quick Start
 
