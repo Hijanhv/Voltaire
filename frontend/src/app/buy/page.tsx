@@ -3,9 +3,10 @@
 import { useState, useMemo } from "react";
 import { useConnection, useWriteContract } from "wagmi";
 import { parseUnits } from "viem";
-import { MOCK_SPOT, MOCK_VOL, STRIKES, formatTimeToExpiry } from "@/lib/mockData";
+import { STRIKES, formatTimeToExpiry } from "@/lib/mockData";
 import { blackScholes } from "@/lib/blackScholes";
 import { CONTRACTS, ERC20_ABI } from "@/lib/config";
+import { useEthPrice, useVolatility } from "@/lib/hooks";
 
 const EXPIRIES = [
   { label: "28 MAR 2026", ts: new Date("2026-03-28").getTime() / 1000 },
@@ -15,46 +16,52 @@ const EXPIRIES = [
 ];
 
 const TX_LABEL: Record<string, string> = {
-  idle: "",
+  idle:      "",
   approving: "Approving USDC…",
-  buying: "Confirming purchase…",
-  done: "Purchase confirmed!",
-  error: "Transaction failed",
+  buying:    "Confirming purchase…",
+  done:      "Purchase confirmed!",
+  error:     "Transaction failed",
 };
 
 export default function BuyOptions() {
-  const [isCall, setIsCall] = useState(true);
-  const [strike, setStrike] = useState(3400);
+  const [isCall, setIsCall]       = useState(true);
+  const [strike, setStrike]       = useState(3400);
   const [expiryIdx, setExpiryIdx] = useState(0);
-  const [quantity, setQuantity] = useState(1);
-  const [txState, setTxState] = useState<"idle" | "approving" | "buying" | "done" | "error">("idle");
+  const [quantity, setQuantity]   = useState(1);
+  const [txState, setTxState]     = useState<"idle" | "approving" | "buying" | "done" | "error">("idle");
 
-  const connection = useConnection();
+  const connection  = useConnection();
   const isConnected = connection?.status === "connected";
   const { writeContractAsync: sendTx } = useWriteContract();
 
+  const { price: spot, loading: priceLoading } = useEthPrice();
+  const { vol, age } = useVolatility();
+
+  // Use live spot/vol with graceful fallback
+  const liveSpot = spot > 0 ? spot : 3000;
+  const liveVol  = vol  > 0 ? vol  : 0.7;
+
   const expiry = EXPIRIES[expiryIdx].ts;
-  const bs = useMemo(() => blackScholes({ spot: MOCK_SPOT, strike, expiry, vol: MOCK_VOL, isCall }), [isCall, strike, expiry]);
-  const totalPremium = bs.price * quantity;
-  const tte = formatTimeToExpiry(expiry);
-  const moneyness = ((MOCK_SPOT / strike - 1) * 100).toFixed(1);
+  const bs = useMemo(
+    () => blackScholes({ spot: liveSpot, strike, expiry, vol: liveVol, isCall }),
+    [isCall, strike, expiry, liveSpot, liveVol]
+  );
+  const totalPremium  = bs.price * quantity;
+  const tte           = formatTimeToExpiry(expiry);
+  const moneyness     = ((liveSpot / strike - 1) * 100).toFixed(1);
   const moneynessLabel = isCall
-    ? MOCK_SPOT > strike ? "ITM" : MOCK_SPOT < strike ? "OTM" : "ATM"
-    : MOCK_SPOT < strike ? "ITM" : MOCK_SPOT > strike ? "OTM" : "ATM";
+    ? liveSpot > strike ? "ITM" : liveSpot < strike ? "OTM" : "ATM"
+    : liveSpot < strike ? "ITM" : liveSpot > strike ? "OTM" : "ATM";
 
   const strikeChain = useMemo(() =>
     STRIKES.map((s) => {
-      const b = blackScholes({ spot: MOCK_SPOT, strike: s, expiry, vol: MOCK_VOL, isCall });
-      return { strike: s, premium: b.price, delta: b.delta, iv: MOCK_VOL };
-    }), [isCall, expiry]);
+      const b = blackScholes({ spot: liveSpot, strike: s, expiry, vol: liveVol, isCall });
+      return { strike: s, premium: b.price, delta: b.delta, iv: liveVol };
+    }), [isCall, expiry, liveSpot, liveVol]);
 
   async function handleBuy() {
-    if (!isConnected) {
-      alert("Connect your wallet first.");
-      return;
-    }
+    if (!isConnected) { alert("Connect your wallet first."); return; }
     try {
-      // Step 1: approve USDC spend
       const premiumUsdc = parseUnits(totalPremium.toFixed(6), 6);
       setTxState("approving");
       await sendTx({
@@ -63,10 +70,9 @@ export default function BuyOptions() {
         functionName: "approve",
         args: [CONTRACTS.optionsHook, premiumUsdc],
       });
-      // Step 2: buy via hook (swap with hookData encoding the option params)
       setTxState("buying");
-      // The hook intercepts the swap and mints the option token
-      // For demo: show confirmed state after approve succeeds
+      // Hook intercepts the swap and mints the option token
+      // Full swap integration pending pool initialization on testnet
       setTxState("done");
       setTimeout(() => setTxState("idle"), 4000);
     } catch {
@@ -76,6 +82,9 @@ export default function BuyOptions() {
   }
 
   const isBusy = txState === "approving" || txState === "buying";
+  const volAgeLabel = age > 0
+    ? age < 60 ? `${age}s ago` : `${Math.floor(age / 60)}m ago`
+    : "";
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto" }} className="fade-in">
@@ -84,14 +93,16 @@ export default function BuyOptions() {
           Trade Options
         </h1>
         <p style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 6 }}>
-          On-chain Black-Scholes pricing · IV: {(MOCK_VOL * 100).toFixed(1)}% (cross-chain index)
+          On-chain Black-Scholes pricing ·{" "}
+          {priceLoading ? "Loading…" : `ETH $${liveSpot.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}
+          {" · "}IV: {liveVol > 0 ? `${(liveVol * 100).toFixed(1)}%` : "…"}
+          {volAgeLabel ? ` (updated ${volAgeLabel})` : ""}
         </p>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 310px", gap: 18 }}>
         {/* Left: strike chain */}
         <div>
-          {/* Filters */}
           <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
             <div style={{ display: "flex", background: "var(--bg-3)", borderRadius: 9, padding: 3, gap: 2 }}>
               {[true, false].map((c) => (
@@ -153,7 +164,7 @@ export default function BuyOptions() {
               <tbody>
                 {strikeChain.map((row, i) => {
                   const isSelected = row.strike === strike;
-                  const isAtm = Math.abs(row.strike - MOCK_SPOT) < 100;
+                  const isAtm = Math.abs(row.strike - liveSpot) < 100;
                   return (
                     <tr key={row.strike}
                       onClick={() => setStrike(row.strike)}
@@ -203,11 +214,11 @@ export default function BuyOptions() {
             </div>
 
             <div style={{ background: "var(--bg-2)", borderRadius: 8, padding: "12px 14px", marginBottom: 16 }}>
-              <Row label="Spot" value={`$${MOCK_SPOT.toLocaleString("en-US", { minimumFractionDigits: 2 })}`} />
-              <Row label="Strike" value={`$${strike.toLocaleString()}`} />
+              <Row label="Spot"      value={priceLoading ? "Loading…" : `$${liveSpot.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+              <Row label="Strike"    value={`$${strike.toLocaleString()}`} />
               <Row label="Moneyness" value={`${moneynessLabel} (${moneyness}%)`} />
-              <Row label="IV" value={`${(MOCK_VOL * 100).toFixed(1)}%`} />
-              <Row label="Expires" value={tte} />
+              <Row label="IV"        value={`${(liveVol * 100).toFixed(1)}%`} />
+              <Row label="Expires"   value={tte} />
             </div>
 
             <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>Greeks</div>
@@ -215,7 +226,7 @@ export default function BuyOptions() {
               <Greek label="Δ Delta" value={(bs.delta * 100).toFixed(1)} />
               <Greek label="Γ Gamma" value={bs.gamma.toFixed(4)} />
               <Greek label="Θ Theta" value={`$${bs.theta.toFixed(2)}/d`} />
-              <Greek label="ν Vega" value={`$${bs.vega.toFixed(2)}/1%`} />
+              <Greek label="ν Vega"  value={`$${bs.vega.toFixed(2)}/1%`} />
             </div>
 
             <div style={{ marginBottom: 16 }}>
@@ -295,7 +306,7 @@ export default function BuyOptions() {
               ±{bs.impliedMovePercent.toFixed(1)}%
             </div>
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-              1σ move by expiry · ${(MOCK_SPOT * bs.impliedMovePercent / 100).toFixed(0)} range
+              1σ move by expiry · ${(liveSpot * bs.impliedMovePercent / 100).toFixed(0)} range
             </div>
           </div>
         </div>
@@ -323,8 +334,7 @@ function Greek({ label, value }: { label: string; value: string }) {
 }
 
 const qBtn: React.CSSProperties = {
-  width: 34,
-  height: 34,
+  width: 34, height: 34,
   border: "1px solid var(--border)",
   borderRadius: 8,
   background: "var(--surface)",

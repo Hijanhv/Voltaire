@@ -2,17 +2,28 @@
 
 import { useConnection, useConnect, useDisconnect } from "wagmi";
 import { injected } from "wagmi/connectors";
-import { MOCK_SPOT, MOCK_VOL } from "@/lib/mockData";
+import { useEthPrice, useVolatility } from "@/lib/hooks";
 
 export default function TopBar() {
-  const volPct = (MOCK_VOL * 100).toFixed(1);
-  const connection = useConnection();
-  const { connect } = useConnect();
+  const { price: spot, loading: priceLoading } = useEthPrice();
+  const { vol, age } = useVolatility();
+
+  const connection  = useConnection();
+  const { connect }    = useConnect();
   const { disconnect } = useDisconnect();
 
-  const address = connection?.address;
+  const address     = connection?.address;
   const isConnected = connection?.status === "connected";
-  const shortAddr = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
+  const shortAddr   = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
+
+  const spotDisplay = priceLoading
+    ? "…"
+    : `$${spot.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const volDisplay = vol > 0 ? `${(vol * 100).toFixed(1)}%` : "…";
+  const ageDisplay = age > 0 && age < 3600
+    ? age < 60 ? `${age}s` : `${Math.floor(age / 60)}m`
+    : "";
 
   return (
     <header style={{
@@ -24,11 +35,11 @@ export default function TopBar() {
       padding: "0 32px",
       justifyContent: "space-between",
     }}>
-      {/* Left: market stats */}
+      {/* Left: live market stats */}
       <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-        <Stat label="ETH" value={`$${MOCK_SPOT.toLocaleString("en-US", { minimumFractionDigits: 2 })}`} />
+        <Stat label="ETH" value={spotDisplay} />
         <Sep />
-        <Stat label="Vol Index" value={`${volPct}%`} valueColor="var(--forest)" sub="4-chain" />
+        <Stat label="Vol Index" value={volDisplay} valueColor="var(--forest)" sub={ageDisplay} />
         <Sep />
         <Stat label="Network" value="Unichain Sepolia" />
         <Sep />

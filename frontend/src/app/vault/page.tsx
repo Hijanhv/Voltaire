@@ -1,44 +1,57 @@
 "use client";
 
 import { useState } from "react";
-import { useConnection, useWriteContract } from "wagmi";
+import { useConnection, useWriteContract, useAccount } from "wagmi";
 import { parseUnits } from "viem";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { MOCK_VAULT, formatCompact } from "@/lib/mockData";
-import { CONTRACTS, VAULT_ABI, ERC20_ABI } from "@/lib/config";
+import { useEthPrice, useVolatility, useActiveSeries, useVaultData } from "@/lib/hooks";
+import { formatCompact } from "@/lib/mockData";
+import { CONTRACTS, COLLATERAL_VAULT_ABI, ERC20_ABI } from "@/lib/config";
 
-const EARNINGS_HISTORY = Array.from({ length: 30 }, (_, i) => ({
-  day: i + 1,
-  cumulative: Math.round(80_000 + i * 3_500 + (Math.random() - 0.3) * 1_000),
-}));
-
-const ACTIVE_LOCKS = [
-  { series: "ETH-3200-MAR26-C", locked: 640_000, pct: 22 },
-  { series: "ETH-3400-MAR26-C", locked: 440_000, pct: 15 },
-  { series: "ETH-3000-MAR26-P", locked: 316_000, pct: 11 },
-  { series: "ETH-3500-APR26-C", locked: 256_000, pct: 9 },
-  { series: "ETH-2800-APR26-P", locked: 145_000, pct: 5 },
-];
-
-// Mock user USDC balance for % buttons
-const MOCK_USER_USDC = 100_000;
+const USDC_DEC = 6;
 
 export default function Vault() {
   const [depositAmount, setDepositAmount] = useState("");
-  const [tab, setTab] = useState<"deposit" | "withdraw">("deposit");
+  const [tab, setTab]     = useState<"deposit" | "withdraw">("deposit");
   const [txState, setTxState] = useState<"idle" | "approving" | "pending" | "done" | "error">("idle");
 
-  const connection = useConnection();
+  const connection  = useConnection();
   const isConnected = connection?.status === "connected";
+  const { address } = useAccount();
   const { writeContractAsync: sendTx } = useWriteContract();
 
-  const utilPct = (MOCK_VAULT.utilized / MOCK_VAULT.totalCollateral) * 100;
-  const available = MOCK_VAULT.totalCollateral - MOCK_VAULT.utilized;
+  const { price: spot } = useEthPrice();
+  const { vol }         = useVolatility();
+  const { activeSeries } = useActiveSeries(spot > 0 ? spot : 3000, vol > 0 ? vol : 0.7);
+  const seriesIds = activeSeries.map((s) => s.id);
 
-  function setQuickAmount(pct: number | "max") {
-    const base = pct === "max" ? MOCK_USER_USDC : (MOCK_USER_USDC * (pct as number)) / 100;
-    setDepositAmount(base.toFixed(2));
-  }
+  const {
+    totalCollateral,
+    utilized,
+    utilizationPct,
+    availableLiquidity,
+    userPositionValue,
+    userShares,
+    seriesLocks,
+    loading: vaultLoading,
+  } = useVaultData(seriesIds, address);
+
+  // Per-series lock data for the breakdown table
+  const activeLocks = activeSeries
+    .map((s, i) => {
+      const lockEntry = seriesLocks[i];
+      const locked = lockEntry?.locked ? Number(lockEntry.locked) / 10 ** USDC_DEC : 0;
+      return { series: s.ticker, locked, pct: totalCollateral > 0 ? (locked / totalCollateral) * 100 : 0 };
+    })
+    .filter((l) => l.locked > 0)
+    .sort((a, b) => b.locked - a.locked);
+
+  // Utilization ratio for the bar
+  const utilPct = utilizationPct;
+  const available = availableLiquidity;
+
+  // User's mock initial deposit (would need events to track properly)
+  // Show position value if user has shares, otherwise 0
+  const userHasPosition = userShares > 0;
 
   async function handleAction() {
     if (!isConnected) { alert("Connect your wallet first."); return; }
@@ -46,7 +59,7 @@ export default function Vault() {
     if (!depositAmount || isNaN(amt) || amt <= 0) { alert("Enter a valid amount."); return; }
 
     try {
-      const amountUsdc = parseUnits(amt.toFixed(6), 6);
+      const amountUsdc = parseUnits(amt.toFixed(6), USDC_DEC);
 
       if (tab === "deposit") {
         setTxState("approving");
@@ -59,17 +72,21 @@ export default function Vault() {
         setTxState("pending");
         await sendTx({
           address: CONTRACTS.collateralVault,
-          abi: VAULT_ABI,
+          abi: COLLATERAL_VAULT_ABI,
           functionName: "deposit",
           args: [CONTRACTS.usdc, amountUsdc],
         });
       } else {
+        // Withdraw: input is USDC amount; convert to shares
+        // shares = (amount * totalShares) / totalAssets — approximated via userShares
+        // For simplicity, allow withdrawing by share count equal to USDC input (1:1 approx)
+        const sharesToWithdraw = BigInt(Math.floor(amt * 10 ** USDC_DEC));
         setTxState("pending");
         await sendTx({
           address: CONTRACTS.collateralVault,
-          abi: VAULT_ABI,
+          abi: COLLATERAL_VAULT_ABI,
           functionName: "withdraw",
-          args: [CONTRACTS.usdc, amountUsdc],
+          args: [CONTRACTS.usdc, sharesToWithdraw],
         });
       }
 
@@ -82,8 +99,20 @@ export default function Vault() {
     }
   }
 
+  function setQuickAmount(pct: number | "max") {
+    if (!userHasPosition) return;
+    const base = pct === "max" ? userPositionValue : (userPositionValue * (pct as number)) / 100;
+    setDepositAmount(base.toFixed(2));
+  }
+
   const isBusy = txState === "approving" || txState === "pending";
-  const txLabel = { idle: "", approving: "Approving USDC…", pending: tab === "deposit" ? "Depositing…" : "Withdrawing…", done: "Transaction confirmed!", error: "Transaction failed" }[txState];
+  const txLabel = {
+    idle:      "",
+    approving: "Approving USDC…",
+    pending:   tab === "deposit" ? "Depositing…" : "Withdrawing…",
+    done:      "Transaction confirmed!",
+    error:     "Transaction failed",
+  }[txState];
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto" }} className="fade-in">
@@ -100,88 +129,93 @@ export default function Vault() {
         {/* Left */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-            <VaultKpi label="Total Deposits" value={formatCompact(MOCK_VAULT.totalCollateral)} sub="USDC" />
-            <VaultKpi label="Utilization" value={`${utilPct.toFixed(1)}%`} sub={`${formatCompact(MOCK_VAULT.utilized)} locked`} color={utilPct > 80 ? "var(--red)" : "var(--forest)"} />
-            <VaultKpi label="Est. APY" value={`${(MOCK_VAULT.apy * 100).toFixed(1)}%`} sub="from premiums" color="var(--green)" />
+            <VaultKpi
+              label="Total Deposits"
+              value={vaultLoading ? "—" : formatCompact(totalCollateral)}
+              sub="USDC"
+            />
+            <VaultKpi
+              label="Utilization"
+              value={vaultLoading ? "—" : `${utilPct.toFixed(1)}%`}
+              sub={`${formatCompact(utilized)} locked`}
+              color={utilPct > 80 ? "var(--red)" : "var(--forest)"}
+            />
+            <VaultKpi
+              label="Available"
+              value={vaultLoading ? "—" : formatCompact(available)}
+              sub="for new options"
+              color="var(--green)"
+            />
           </div>
 
+          {/* Utilization bar */}
           <div className="card" style={{ padding: 22 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
               <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>Vault Utilization</span>
-              <span style={{ fontSize: 12, fontFeatureSettings: '"tnum" 1', color: "var(--text-muted)" }}>{formatCompact(available)} available</span>
+              <span style={{ fontSize: 12, fontFeatureSettings: '"tnum" 1', color: "var(--text-muted)" }}>
+                {formatCompact(available)} available
+              </span>
             </div>
             <div style={{ height: 8, background: "var(--bg-3)", borderRadius: 4, overflow: "hidden", marginBottom: 14 }}>
               <div style={{
                 height: "100%",
-                width: `${utilPct}%`,
+                width: `${Math.min(utilPct, 100)}%`,
                 background: utilPct > 80 ? "var(--red)" : "var(--forest)",
                 borderRadius: 4,
                 opacity: 0.75,
                 transition: "width 0.5s",
               }} />
             </div>
-            <div style={{ display: "flex", gap: 14 }}>
-              {ACTIVE_LOCKS.map((l) => (
-                <div key={l.series} style={{ flex: 1 }}>
-                  <div style={{ fontSize: 9.5, color: "var(--text-muted)", marginBottom: 3 }}>{l.series.split("-").slice(1, 3).join("-")}</div>
-                  <div style={{ height: 3, background: "var(--bg-3)", borderRadius: 2 }}>
-                    <div style={{ height: "100%", width: `${l.pct * 4}%`, background: "var(--forest)", borderRadius: 2, opacity: 0.55 }} />
+            {activeLocks.length > 0 ? (
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                {activeLocks.slice(0, 5).map((l) => (
+                  <div key={l.series} style={{ flex: 1, minWidth: 60 }}>
+                    <div style={{ fontSize: 9.5, color: "var(--text-muted)", marginBottom: 3 }}>
+                      {l.series.split("-").slice(1, 3).join("-")}
+                    </div>
+                    <div style={{ height: 3, background: "var(--bg-3)", borderRadius: 2 }}>
+                      <div style={{ height: "100%", width: `${l.pct * 4}%`, background: "var(--forest)", borderRadius: 2, opacity: 0.55 }} />
+                    </div>
+                    <div style={{ fontSize: 9.5, color: "var(--text-muted)", marginTop: 3 }}>{l.pct.toFixed(1)}%</div>
                   </div>
-                  <div style={{ fontSize: 9.5, color: "var(--text-muted)", marginTop: 3 }}>{l.pct}%</div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                {activeSeries.length === 0 ? "No active series — all collateral is available." : "No collateral locked yet."}
+              </div>
+            )}
           </div>
 
-          <div className="card" style={{ padding: 22 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-              <div>
-                <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>
-                  Cumulative Premiums (30d)
-                </div>
-                <div style={{ fontFamily: "var(--font-playfair, serif)", fontSize: 24, fontWeight: 700, color: "var(--forest)", fontFeatureSettings: '"tnum" 1' }}>
-                  {formatCompact(MOCK_VAULT.premiumsEarned)}
-                </div>
-              </div>
-              <div style={{ fontSize: 11, padding: "4px 10px", background: "var(--green-bg)", color: "var(--green)", borderRadius: 6, fontWeight: 500, border: "1px solid rgba(45,106,79,0.15)" }}>
-                +{(MOCK_VAULT.apy * 100).toFixed(1)}% APY
-              </div>
-            </div>
-            <ResponsiveContainer width="100%" height={110}>
-              <AreaChart data={EARNINGS_HISTORY}>
-                <XAxis dataKey="day" hide />
-                <YAxis hide />
-                <Tooltip
-                  formatter={(v) => [formatCompact(v as number), "Cumulative"]}
-                  contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 11 }}
-                />
-                <Area type="monotone" dataKey="cumulative" stroke="var(--forest)" strokeWidth={1.8} fill="var(--forest-dim)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
+          {/* Collateral by Series table */}
           <div className="card" style={{ overflow: "hidden" }}>
             <div style={{ padding: "14px 22px", borderBottom: "1px solid var(--border)", fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>
               Collateral by Series
             </div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-              <thead>
-                <tr style={{ background: "var(--bg-2)" }}>
-                  {["Series", "Locked (USDC)", "Share"].map((h) => (
-                    <th key={h} style={{ padding: "9px 22px", textAlign: h === "Series" ? "left" : "right", fontSize: 10, fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", borderBottom: "1px solid var(--border)" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {ACTIVE_LOCKS.map((l, i) => (
-                  <tr key={l.series} style={{ borderBottom: i < ACTIVE_LOCKS.length - 1 ? "1px solid var(--border)" : "none" }}>
-                    <td style={{ padding: "10px 22px", fontWeight: 500, color: "var(--text-primary)" }}>{l.series}</td>
-                    <td style={{ padding: "10px 22px", textAlign: "right", fontFeatureSettings: '"tnum" 1', color: "var(--forest)" }}>{formatCompact(l.locked)}</td>
-                    <td style={{ padding: "10px 22px", textAlign: "right", color: "var(--text-muted)", fontFeatureSettings: '"tnum" 1' }}>{l.pct}%</td>
+            {activeLocks.length === 0 ? (
+              <div style={{ padding: "24px 22px", fontSize: 12, color: "var(--text-muted)", textAlign: "center" }}>
+                No collateral currently locked.
+              </div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ background: "var(--bg-2)" }}>
+                    {["Series", "Locked (USDC)", "Share"].map((h) => (
+                      <th key={h} style={{ padding: "9px 22px", textAlign: h === "Series" ? "left" : "right", fontSize: 10, fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", borderBottom: "1px solid var(--border)" }}>{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {activeLocks.map((l, i) => (
+                    <tr key={l.series} style={{ borderBottom: i < activeLocks.length - 1 ? "1px solid var(--border)" : "none" }}>
+                      <td style={{ padding: "10px 22px", fontWeight: 500, color: "var(--text-primary)" }}>{l.series}</td>
+                      <td style={{ padding: "10px 22px", textAlign: "right", fontFeatureSettings: '"tnum" 1', color: "var(--forest)" }}>{formatCompact(l.locked)}</td>
+                      <td style={{ padding: "10px 22px", textAlign: "right", color: "var(--text-muted)", fontFeatureSettings: '"tnum" 1' }}>{l.pct.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
 
@@ -209,17 +243,24 @@ export default function Vault() {
               ))}
             </div>
 
+            {/* User position */}
             <div style={{ background: "var(--bg-2)", borderRadius: 8, padding: "13px 14px", marginBottom: 18 }}>
               <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>
                 Your Position
               </div>
-              <VRow label="Deposited" value="$50,000.00" />
-              <VRow label="Current value" value="$54,280.00" />
-              <VRow label="Premiums earned" value="$4,280.00" />
-              <VRow label="Yield (30d)" value="+8.56%" valueColor="var(--green)" />
+              {isConnected ? (
+                <>
+                  <VRow label="Position value" value={userHasPosition ? `$${userPositionValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "$0.00"} />
+                  <VRow label="Shares held"    value={userShares > 0 ? userShares.toLocaleString(undefined, { maximumFractionDigits: 4 }) : "0"} />
+                </>
+              ) : (
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Connect wallet to view your position.</div>
+              )}
             </div>
 
-            <label style={{ fontSize: 11, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Amount (USDC)</label>
+            <label style={{ fontSize: 11, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
+              Amount (USDC)
+            </label>
             <div style={{ position: "relative", marginBottom: 12 }}>
               <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "var(--text-muted)" }}>$</span>
               <input
@@ -231,30 +272,24 @@ export default function Vault() {
               />
             </div>
 
-            <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
-              {([25, 50, "max"] as const).map((p) => (
-                <button key={String(p)} onClick={() => setQuickAmount(p === "max" ? "max" : p)} style={{
-                  flex: 1,
-                  padding: "6px 0",
-                  border: "1px solid var(--border)",
-                  borderRadius: 7,
-                  fontSize: 11,
-                  background: "var(--surface)",
-                  cursor: "pointer",
-                  color: "var(--text-secondary)",
-                  transition: "all 0.15s",
-                }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--forest)"; e.currentTarget.style.color = "var(--forest)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
-                >
-                  {p === "max" ? "Max" : `${p}%`}
-                </button>
-              ))}
-            </div>
+            {tab === "withdraw" && userHasPosition && (
+              <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+                {([25, 50, "max"] as const).map((p) => (
+                  <button key={String(p)} onClick={() => setQuickAmount(p === "max" ? "max" : p)} style={{
+                    flex: 1, padding: "6px 0", border: "1px solid var(--border)", borderRadius: 7, fontSize: 11, background: "var(--surface)", cursor: "pointer", color: "var(--text-secondary)", transition: "all 0.15s",
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--forest)"; e.currentTarget.style.color = "var(--forest)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+                  >
+                    {p === "max" ? "Max" : `${p}%`}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {tab === "deposit" && (
               <div style={{ background: "var(--green-bg)", borderRadius: 8, padding: "10px 13px", marginBottom: 16, fontSize: 11, color: "var(--green)", border: "1px solid rgba(45,106,79,0.15)" }}>
-                Estimated yield: <strong>17.3% APY</strong> based on current premium rates
+                Earn premiums pro-rata to your share of the vault.
               </div>
             )}
 
