@@ -200,7 +200,8 @@ contract OptionsHookTest is Test {
 
         assertGt(unitPremium, 0, "unit premium > 0");
         assertEq(totalPremium, unitPremium, "1 contract: total = unit");
-        assertEq(vol, 0.7e18, "vol from oracle");
+        // vol returned is oracle vol × 1.15 (IV premium multiplier)
+        assertEq(vol, (0.7e18 * 11_500) / 10_000, "vol is IV-adjusted (1.15x oracle)");
     }
 
     function test_quote_premium_scales_with_quantity() public view {

@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 import { useEthPrice, useVolatility, useActiveSeries, useVaultData } from "@/lib/hooks";
 import { formatCompact, formatTimeToExpiry } from "@/lib/mockData";
 import { blackScholes } from "@/lib/blackScholes";
+import { CONTRACTS } from "@/lib/config";
 
 export default function Dashboard() {
   const { price: spot, loading: priceLoading } = useEthPrice();
@@ -22,6 +23,7 @@ export default function Dashboard() {
 
   const volDisplay = vol > 0 ? `${(vol * 100).toFixed(1)}%` : "Loading…";
   const ageDisplay = age > 0 ? (age < 60 ? `${age}s ago` : `${Math.floor(age / 60)}m ago`) : "";
+  const isOracleStale = age > 1800; // 30 minutes without update
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto" }} className="fade-in">
@@ -42,6 +44,7 @@ export default function Dashboard() {
           value={volDisplay}
           sub={ageDisplay ? `Updated ${ageDisplay}` : "On-chain oracle"}
           accent
+          stale={isOracleStale}
         />
         <KpiCard
           label="Open Interest"
@@ -184,17 +187,23 @@ export default function Dashboard() {
 
       {/* Target Users */}
       <TargetUsersSection />
+
+      {/* System Status */}
+      <SystemStatusSection vol={vol} age={age} isStale={isOracleStale} />
     </div>
   );
 }
 
-function KpiCard({ label, value, sub, accent, green }: { label: string; value: string; sub: string; accent?: boolean; green?: boolean }) {
+function KpiCard({ label, value, sub, accent, green, stale }: { label: string; value: string; sub: string; accent?: boolean; green?: boolean; stale?: boolean }) {
   const color = accent ? "var(--forest)" : green ? "var(--green)" : "var(--text-primary)";
   return (
     <div className="card" style={{ padding: "20px 22px" }}>
-      <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+        <span style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</span>
+        {stale && <span style={{ fontSize: 9, background: "rgba(155,58,42,0.12)", color: "var(--red, #9b3a2a)", borderRadius: 4, padding: "1px 5px", fontWeight: 600 }}>STALE</span>}
+      </div>
       <div style={{ fontFamily: "var(--font-playfair, serif)", fontSize: 24, fontWeight: 700, color, letterSpacing: "-0.02em", fontFeatureSettings: '"tnum" 1', lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>{sub}</div>
+      <div style={{ fontSize: 11, color: stale ? "var(--red, #9b3a2a)" : "var(--text-muted)", marginTop: 6 }}>{sub}</div>
     </div>
   );
 }
@@ -365,6 +374,59 @@ function ComparisonSection({ spot, vol }: { spot: number; vol: number }) {
       <div style={{ padding: "10px 24px", borderTop: "1px solid var(--border)", fontSize: 10.5, color: "var(--text-muted)" }}>
         Traditional IV estimate uses realized vol × 1.18 (realistic market maker spread for ETH options). Gas estimate for Ethereum mainnet ~$18 avg.
         All premium figures computed live via Black-Scholes with current oracle data.
+      </div>
+    </div>
+  );
+}
+
+/* ── System Status ───────────────────────────────────────────────────── */
+const RSC_CONTRACTS = {
+  relayer: "0x013dEE73A250A754705Dedc3A326cD9da9a4c856",
+  settler: "0xB4A9Ddc348D8814c95Fd6811B2899f5036920324",
+};
+
+function SystemStatusSection({ vol, age, isStale }: { vol: number; age: number; isStale: boolean }) {
+  const contracts = [
+    { label: "VolatilityOracle", addr: CONTRACTS.volOracle, chain: "Unichain Sepolia" },
+    { label: "OptionsHook",      addr: CONTRACTS.optionsHook,     chain: "Unichain Sepolia" },
+    { label: "OptionSeries",     addr: CONTRACTS.optionSeries,    chain: "Unichain Sepolia" },
+    { label: "CollateralVault",  addr: CONTRACTS.collateralVault, chain: "Unichain Sepolia" },
+    { label: "VolatilityRelayer (RSC)", addr: RSC_CONTRACTS.relayer as `0x${string}`, chain: "Reactive (Lasna)" },
+    { label: "ExpirySettler (RSC)",    addr: RSC_CONTRACTS.settler as `0x${string}`, chain: "Reactive (Lasna)" },
+  ];
+
+  const oracleStatus = vol === 0 ? "offline" : isStale ? "stale" : "live";
+  const statusColor = oracleStatus === "live" ? "var(--forest)" : oracleStatus === "stale" ? "#b45309" : "var(--red, #9b3a2a)";
+  const statusDot: React.CSSProperties = {
+    display: "inline-block", width: 7, height: 7, borderRadius: "50%",
+    background: statusColor, marginRight: 5, verticalAlign: "middle",
+  };
+
+  return (
+    <div className="card" style={{ overflow: "hidden", marginBottom: 24 }}>
+      <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 16 }}>
+        <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>System Status</span>
+        <span style={{ fontSize: 11, color: statusColor, display: "flex", alignItems: "center" }}>
+          <span style={statusDot} />
+          Oracle: {oracleStatus} {vol > 0 && age > 0 ? `· last update ${age < 60 ? `${age}s` : `${Math.floor(age / 60)}m`} ago` : ""}
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 0 }}>
+        {contracts.map((c, i) => (
+          <div key={c.label} style={{
+            padding: "12px 20px",
+            borderRight: (i + 1) % 3 !== 0 ? "1px solid var(--border)" : "none",
+            borderBottom: i < 3 ? "1px solid var(--border)" : "none",
+          }}>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>
+              {c.label}
+            </div>
+            <div style={{ fontSize: 11, fontFamily: "monospace", color: "var(--forest)", wordBreak: "break-all", marginBottom: 2 }}>
+              {c.addr.slice(0, 10)}…{c.addr.slice(-6)}
+            </div>
+            <div style={{ fontSize: 9.5, color: "var(--text-muted)" }}>{c.chain}</div>
+          </div>
+        ))}
       </div>
     </div>
   );

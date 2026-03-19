@@ -139,9 +139,10 @@ contract BlackScholesTest is Test {
         uint256 call = bsPrice(spot, strike, expiry, vol, true);
         uint256 put = bsPrice(spot, strike, expiry, vol, false);
 
-        // ATM, no discount: C ≈ P (within 5%)
+        // With 5% risk-free discounting, C - P ≈ S - K*e^(-rT).
+        // For 90d at 5% rate that drift is ~1.2% of spot, so allow 15% tolerance.
         uint256 diff = call > put ? call - put : put - call;
-        assertLt(diff, call / 20, "ATM put-call parity within 5%");
+        assertLt(diff, call / 7, "ATM put-call parity within 15%");
     }
 
     function test_put_call_parity_itm_call() public view {

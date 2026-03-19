@@ -7,6 +7,8 @@ pragma solidity ^0.8.26;
 library BlackScholes {
     uint256 internal constant WAD = 1e18;
     uint256 internal constant HALF_WAD = 5e17;
+    /// @dev Continuously-compounded risk-free rate: 5% p.a.
+    uint256 internal constant RISK_FREE_RATE = 5e16;
 
     /// @notice Compute European call or put price via Black-Scholes
     /// @param spot    Spot price of the underlying (WAD)
@@ -34,6 +36,11 @@ library BlackScholes {
         // We represent time as seconds / SECONDS_PER_YEAR * WAD
         uint256 t = (expiry * WAD) / 365 days;
 
+        // Discount factor: df = e^(-rT), kDf = K * e^(-rT)
+        uint256 rt = mulWad(RISK_FREE_RATE, t);
+        uint256 df = expWad(-int256(rt));
+        uint256 kDf = mulWad(strike, df);
+
         // vol^2 * t (WAD)
         uint256 vol2 = mulWad(vol, vol);
         uint256 vol2t = mulWad(vol2, t);
@@ -45,9 +52,9 @@ library BlackScholes {
         // ln(S/K)  — signed integer in WAD
         int256 lnSK = lnWad(int256(mulDiv(spot, WAD, strike)));
 
-        // d1 = (ln(S/K) + 0.5 * vol^2 * t) / (vol * sqrt(t))
+        // d1 = (ln(S/K) + (r + 0.5 * vol^2) * t) / (vol * sqrt(t))
         // d2 = d1 - vol * sqrt(t)
-        int256 numerator = lnSK + int256(vol2t / 2);
+        int256 numerator = lnSK + int256(vol2t / 2) + int256(rt);
         int256 d1 = divSigned(numerator, int256(volSqrtT));
         int256 d2 = d1 - int256(volSqrtT);
 
@@ -74,13 +81,13 @@ library BlackScholes {
         }
 
         if (isCall) {
-            // C = S * N(d1) - K * N(d2)
+            // C = S * N(d1) - K * e^(-rT) * N(d2)
             uint256 a = mulWad(spot, Nd1);
-            uint256 b = mulWad(strike, Nd2);
+            uint256 b = mulWad(kDf, Nd2);
             return a > b ? a - b : 0;
         } else {
-            // P = K * N(-d2) - S * N(-d1)
-            uint256 a = mulWad(strike, Nd2neg);
+            // P = K * e^(-rT) * N(-d2) - S * N(-d1)
+            uint256 a = mulWad(kDf, Nd2neg);
             uint256 b = mulWad(spot, Nd1neg);
             return a > b ? a - b : 0;
         }

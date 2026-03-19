@@ -149,32 +149,50 @@ contract ReactiveExpirySettler is IReactive {
     }
 
     /// @dev Iterate pending series and emit settlement callbacks for expired ones.
+    ///      Uses swap-and-pop to remove settled entries, keeping the array bounded.
     function _checkAndSettleExpired() internal {
         if (latestSpotPrice == 0) return;
 
-        uint256 len = pendingSeriesIds.length;
-        for (uint256 i = 0; i < len; i++) {
+        uint256 i = 0;
+        while (i < pendingSeriesIds.length) {
             uint256 sid = pendingSeriesIds[i];
             SeriesInfo storage s = series[sid];
 
-            if (s.settled || s.expiry == 0) continue;
-            if (block.timestamp < s.expiry) continue;
+            // Remove already-settled or invalid entries
+            if (s.settled || s.expiry == 0) {
+                _swapAndPop(i);
+                continue; // re-check swapped element at same index
+            }
 
-            // Mark settled locally to prevent double-settling
-            s.settled = true;
+            if (block.timestamp >= s.expiry) {
+                // Mark settled and remove from pending array
+                s.settled = true;
+                _swapAndPop(i);
 
-            // Emit Callback — Reactive Network relays this to Unichain
-            emit Callback(
-                unichainId,
-                optionsHook,
-                CALLBACK_GAS,
-                abi.encodeWithSignature(
-                    "settleExpiredSeries(uint256,uint256)", sid, latestSpotPrice
-                )
-            );
+                // Emit Callback — Reactive Network relays this to Unichain
+                emit Callback(
+                    unichainId,
+                    optionsHook,
+                    CALLBACK_GAS,
+                    abi.encodeWithSignature(
+                        "settleExpiredSeries(uint256,uint256)", sid, latestSpotPrice
+                    )
+                );
+                emit SettlementTriggered(sid, latestSpotPrice, block.timestamp);
+                continue; // re-check swapped element at same index
+            }
 
-            emit SettlementTriggered(sid, latestSpotPrice, block.timestamp);
+            i++;
         }
+    }
+
+    /// @dev Remove element at index i via swap-with-last and pop. O(1).
+    function _swapAndPop(uint256 i) internal {
+        uint256 last = pendingSeriesIds.length - 1;
+        if (i != last) {
+            pendingSeriesIds[i] = pendingSeriesIds[last];
+        }
+        pendingSeriesIds.pop();
     }
 
     // ─── Admin ────────────────────────────────────────────────────────────────

@@ -4,6 +4,8 @@ pragma solidity ^0.8.26;
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {
     BeforeSwapDelta,
@@ -80,6 +82,9 @@ contract OptionsHook is IHooks {
 
     /// @notice Protocol fee taken from each premium (in bps, default 30 = 0.3%)
     uint256 public protocolFeeBps = 30;
+    /// @dev IV premium multiplier applied to realized vol before pricing (1.15x = 11500 bps).
+    ///      Bridges the ~15% gap between realized vol and implied vol observed in the market.
+    uint256 private constant IV_MULT_BPS = 11_500;
     /// @notice Collected protocol fees per token
     mapping(address => uint256) public protocolFees;
 
@@ -134,7 +139,8 @@ contract OptionsHook is IHooks {
         address underlying = Currency.unwrap(key.currency0);
 
         uint256 spot = _getSpotFromPool(key);
-        uint256 vol = volOracle.getVolatility();
+        // Apply IV premium: scale realized vol by 1.15x to approximate implied vol
+        uint256 vol = (volOracle.getVolatility() * IV_MULT_BPS) / 10_000;
         uint256 tte = p.expiry > block.timestamp ? p.expiry - block.timestamp : 0;
 
         uint256 unitPremium = BlackScholes.price(spot, p.strike, tte, vol, p.isCall);
@@ -337,7 +343,7 @@ contract OptionsHook is IHooks {
         uint256 quantity
     ) external view returns (uint256 unitPremium, uint256 totalPremium, uint256 vol) {
         uint256 spot = _getSpotFromPool(key);
-        vol = volOracle.getVolatility();
+        vol = (volOracle.getVolatility() * IV_MULT_BPS) / 10_000;
         uint256 tte = expiry > block.timestamp ? expiry - block.timestamp : 0;
         unitPremium = BlackScholes.price(spot, strike, tte, vol, isCall);
         totalPremium = (unitPremium * quantity) / 1e18;
@@ -371,10 +377,12 @@ contract OptionsHook is IHooks {
         if (spot == 0) spot = 3200e18;
     }
 
-    /// @dev External call wrapper so we can try/catch it
+    /// @dev External call wrapper so we can try/catch it.
+    ///      Reads sqrtPriceX96 from the V4 PoolManager via StateLibrary.
     function _readSqrtPrice(PoolKey calldata key) external view returns (uint160) {
-        // Minimal slot reading — in a full implementation use StateLibrary
-        return 0; // returns 0 so fallback triggers in demo
+        PoolId pid = PoolId.wrap(keccak256(abi.encode(key)));
+        (uint160 sqrtPriceX96,,,) = StateLibrary.getSlot0(poolManager, pid);
+        return sqrtPriceX96;
     }
 
     // ─── Admin ────────────────────────────────────────────────────────────────
