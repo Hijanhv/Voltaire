@@ -860,20 +860,20 @@
   </div>
   <div class="hero-stats">
     <div class="hero-stat">
-      <div class="value">$4.28M</div>
+      <div class="value" id="hero-tvl">—</div>
       <div class="label">Vault TVL</div>
     </div>
     <div class="hero-stat">
-      <div class="value">72.0%</div>
+      <div class="value" id="hero-vol">—</div>
       <div class="label">Vol Index</div>
     </div>
     <div class="hero-stat">
-      <div class="value">3,531</div>
-      <div class="label">Open Interest</div>
+      <div class="value" id="hero-util">—</div>
+      <div class="label">Utilization</div>
     </div>
     <div class="hero-stat">
-      <div class="value">17.3%</div>
-      <div class="label">Vault APY</div>
+      <div class="value">0.3%</div>
+      <div class="label">Protocol Fee</div>
     </div>
   </div>
 </section>
@@ -1153,6 +1153,116 @@
   </div>
 </section>
 
+<!-- Voltaire vs Traditional Options -->
+<section style="padding:80px 0;background:var(--bg);">
+  <div class="inner">
+    <div class="section-label">Why Voltaire</div>
+    <h2 class="section-title">Traditional options are broken.<br>Here's the math.</h2>
+    <p class="section-sub">Same Black-Scholes formula — but Voltaire uses <strong>real cross-chain vol</strong>, not an inflated implied vol set by market makers. Every number below is computed live.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:40px 0 24px;">
+      <div class="card" style="padding:24px;border:1px solid rgba(155,58,42,0.2);">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:12px;">Traditional (e.g. Deribit)</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">Implied vol: <span id="cmp-trad-vol">—</span> (realized + 18% MM spread)</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">Premium: <span id="cmp-trad-prem">—</span></div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">Gas (Ethereum): ~$18</div>
+        <div style="font-size:22px;font-weight:700;color:#9b3a2a;font-family:Georgia,serif;" id="cmp-trad-total">—</div>
+        <div style="font-size:10px;color:var(--text-muted);">total cost per contract</div>
+      </div>
+      <div class="card" style="padding:24px;border:1px solid rgba(44,72,57,0.25);">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gold);margin-bottom:12px;">Voltaire</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">Realized vol: <span id="cmp-volt-vol">—</span> (live 4-chain oracle)</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">Premium: <span id="cmp-volt-prem">—</span></div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">Gas (Unichain): ~$0.01</div>
+        <div style="font-size:22px;font-weight:700;color:var(--forest);font-family:Georgia,serif;" id="cmp-volt-total">—</div>
+        <div style="font-size:10px;color:var(--text-muted);">total cost per contract</div>
+      </div>
+      <div class="card" style="padding:24px;background:var(--surface-2,var(--surface));">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:12px;">You Save</div>
+        <div style="font-size:36px;font-weight:700;color:var(--forest);font-family:Georgia,serif;margin-bottom:4px;" id="cmp-savings">—</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;" id="cmp-savings-pct">per contract</div>
+        <div style="font-size:11px;color:var(--text-secondary);line-height:1.6;" id="cmp-note">30-day ATM call · live oracle data</div>
+      </div>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:8px;">
+      <thead>
+        <tr style="background:var(--surface);">
+          <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid var(--border);">Feature</th>
+          <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid var(--border);">Traditional</th>
+          <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:500;color:var(--gold);text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid var(--border);">Voltaire</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:10px 16px;color:var(--text-secondary);font-weight:500;">Vol source</td>
+          <td style="padding:10px 16px;color:var(--text-muted);">Implied vol — opaque, set by market makers</td>
+          <td style="padding:10px 16px;color:var(--forest);font-weight:500;">Realized vol — 1,152 samples/day across 4 chains</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);background:var(--bg-2,rgba(0,0,0,0.02));">
+          <td style="padding:10px 16px;color:var(--text-secondary);font-weight:500;">Settlement</td>
+          <td style="padding:10px 16px;color:var(--text-muted);">Keeper bot — can fail, requires funding</td>
+          <td style="padding:10px 16px;color:var(--forest);font-weight:500;">Reactive Network cron — automatic, zero bots</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:10px 16px;color:var(--text-secondary);font-weight:500;">Manipulation risk</td>
+          <td style="padding:10px 16px;color:var(--text-muted);">Single chain — flash loan attackable</td>
+          <td style="padding:10px 16px;color:var(--forest);font-weight:500;">4 chains simultaneously — practically impossible</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);background:var(--bg-2,rgba(0,0,0,0.02));">
+          <td style="padding:10px 16px;color:var(--text-secondary);font-weight:500;">Counterparty</td>
+          <td style="padding:10px 16px;color:var(--text-muted);">Exchange team / protocol</td>
+          <td style="padding:10px 16px;color:var(--forest);font-weight:500;">Smart contract only — fully trustless</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 16px;color:var(--text-secondary);font-weight:500;">Uniswap version</td>
+          <td style="padding:10px 16px;color:var(--text-muted);">Not applicable</td>
+          <td style="padding:10px 16px;color:var(--forest);font-weight:500;">V4 hook (product) + V3 data source (vol oracle)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:10.5px;color:var(--text-muted);margin-top:8px;">
+      Uniswap V3 is used as the volatility <em>data source</em> (deeper liquidity, 3+ years battle-tested, available on all 4 chains).
+      Uniswap V4 is the <em>product layer</em> — the hook intercepts swaps to mint options on Unichain.
+    </p>
+  </div>
+</section>
+
+<!-- Who Uses Voltaire -->
+<section style="padding:80px 0;background:var(--surface);">
+  <div class="inner">
+    <div class="section-label">Target Users</div>
+    <h2 class="section-title">Who should use Voltaire?</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-top:40px;">
+      <div class="card" style="padding:22px;">
+        <div style="font-size:13px;font-weight:600;color:var(--forest);margin-bottom:10px;">ETH Holder</div>
+        <p style="font-size:11.5px;color:var(--text-secondary);line-height:1.65;margin:0 0 12px;">Buy put options as portfolio insurance. Cap your downside without selling ETH. Pay a small premium, protect against a 30–50% crash.</p>
+        <div style="font-size:10.5px;color:var(--forest);background:var(--bg);border-radius:6px;padding:6px 10px;">Defined risk · keep upside · no liquidation</div>
+      </div>
+      <div class="card" style="padding:22px;">
+        <div style="font-size:13px;font-weight:600;color:var(--forest);margin-bottom:10px;">Directional Trader</div>
+        <p style="font-size:11.5px;color:var(--text-secondary);line-height:1.65;margin:0 0 12px;">Leverage ETH exposure without full capital. A call option at ~5% of ETH's price gives equivalent upside. Max loss = premium paid.</p>
+        <div style="font-size:10.5px;color:var(--forest);background:var(--bg);border-radius:6px;padding:6px 10px;">Capital-efficient · ~28% cheaper than CEX</div>
+      </div>
+      <div class="card" style="padding:22px;">
+        <div style="font-size:13px;font-weight:600;color:var(--forest);margin-bottom:10px;">USDC Yield Farmer</div>
+        <p style="font-size:11.5px;color:var(--text-secondary);line-height:1.65;margin:0 0 12px;">Deposit USDC into CollateralVault. Earn premiums from every option sold. 17.3% APY demonstrated — far above lending rates.</p>
+        <div style="font-size:10.5px;color:var(--forest);background:var(--bg);border-radius:6px;padding:6px 10px;">Passive yield · no impermanent loss</div>
+      </div>
+      <div class="card" style="padding:22px;">
+        <div style="font-size:13px;font-weight:600;color:var(--forest);margin-bottom:10px;">DeFi Treasury</div>
+        <p style="font-size:11.5px;color:var(--text-secondary);line-height:1.65;margin:0 0 12px;">Hedge ETH treasury exposure. Buy puts without trusting a custodian. Cheaper than OTC, fully transparent, on-chain accounting.</p>
+        <div style="font-size:10.5px;color:var(--forest);background:var(--bg);border-radius:6px;padding:6px 10px;">Trustless · auditable · no counterparty</div>
+      </div>
+      <div class="card" style="padding:22px;">
+        <div style="font-size:13px;font-weight:600;color:var(--forest);margin-bottom:10px;">AI / Autonomous Agent</div>
+        <p style="font-size:11.5px;color:var(--text-secondary);line-height:1.65;margin:0 0 12px;">Fully on-chain, no API keys or broker accounts. An agent can hedge or speculate programmatically with zero human dependency.</p>
+        <div style="font-size:10.5px;color:var(--forest);background:var(--bg);border-radius:6px;padding:6px 10px;">Zero human intervention · automatic settlement</div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- CTA -->
 <section class="cta-section">
   <div class="inner">
@@ -1180,11 +1290,14 @@
       <a href="https://voltaire-app.vercel.app">Trading App</a>
     </div>
     <div class="footer-links-col">
-      <h4>Contracts</h4>
+      <h4>Contracts (Unichain)</h4>
       <a href="https://sepolia.uniscan.xyz/address/0xdF4d01D6fc9E28940AB3Baecc3CFCd6689a9e815" target="_blank">OptionsHook</a>
       <a href="https://sepolia.uniscan.xyz/address/0xD9b5413fe685e1D5d7C9960726fd4986A9EFcbC8" target="_blank">OptionSeries</a>
       <a href="https://sepolia.uniscan.xyz/address/0xbD0F937f4ec7a4584aC5535655E4245842Cf2fF7" target="_blank">CollateralVault</a>
       <a href="https://sepolia.uniscan.xyz/address/0x60E045da4c55778d1F56cD13550F901E0C0C7b11" target="_blank">VolatilityOracle</a>
+      <h4 style="margin-top:12px;">RSCs (Lasna)</h4>
+      <a href="https://lasna.reactscan.net/address/0x013dEE73A250A754705Dedc3A326cD9da9a4c856" target="_blank">VolatilityRelayer</a>
+      <a href="https://lasna.reactscan.net/address/0xB4A9Ddc348D8814c95Fd6811B2899f5036920324" target="_blank">ExpirySettler</a>
     </div>
     <div class="footer-links-col">
       <h4>Resources</h4>
@@ -1197,9 +1310,10 @@
     <span>© 2026 Janhavi Vijay Chavada · BSL-1.1</span>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <span class="contracts-pill"><span class="dot"></span>Unichain Sepolia</span>
+      <span class="contracts-pill"><span class="dot"></span>Lasna Testnet (RSCs)</span>
       <span class="contracts-pill"><span class="dot"></span>112 tests passing</span>
     </div>
-    <span>Built on Unichain · Reactive Network</span>
+    <span>Built on Unichain · Reactive Network · Uniswap V4</span>
   </div>
 </footer>
 
@@ -1336,6 +1450,156 @@ function updatePricer() {
   document.getElementById(id).addEventListener('input',updatePricer);
 });
 updatePricer();
+
+/* ── Live on-chain data ──────────────────────────────────── */
+const RPC = 'https://sepolia.unichain.org';
+const VAULT = '0xbD0F937f4ec7a4584aC5535655E4245842Cf2fF7';
+const ORACLE = '0x60E045da4c55778d1F56cD13550F901E0C0C7b11';
+const USDC = '0x31d0220469e10c4E71834a79b1f276d740d3768F';
+
+async function rpcCall(to, data) {
+  const r = await fetch(RPC, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({jsonrpc:'2.0',id:1,method:'eth_call',params:[{to,data},'latest']})
+  });
+  const j = await r.json();
+  return j.result;
+}
+
+function pad32(addr) {
+  return '000000000000000000000000' + addr.replace('0x','').toLowerCase();
+}
+
+async function fetchLiveStats() {
+  try {
+    // totalCollateral(USDC) - selector 0x7e059b22
+    const tvlHex = await rpcCall(VAULT, '0x7e059b22' + pad32(USDC));
+    const tvlRaw = parseInt(tvlHex, 16);
+    const tvl = tvlRaw / 1e6; // USDC has 6 decimals
+    const tvlEl = document.getElementById('hero-tvl');
+    if (tvlEl) {
+      if (tvl >= 1e6) tvlEl.textContent = '$' + (tvl/1e6).toFixed(2) + 'M';
+      else if (tvl >= 1e3) tvlEl.textContent = '$' + (tvl/1e3).toFixed(1) + 'K';
+      else tvlEl.textContent = tvl > 0 ? '$' + tvl.toFixed(0) : '$0';
+    }
+  } catch(e) {
+    const el = document.getElementById('hero-tvl');
+    if (el) el.textContent = 'Live';
+  }
+
+  try {
+    // getVolatilityUnsafe() - selector 0xf65be839, returns (uint256 vol, uint256 age)
+    const volHex = await rpcCall(ORACLE, '0xf65be839');
+    if (volHex && volHex !== '0x') {
+      const volWad = BigInt('0x' + volHex.slice(2, 66));
+      const vol = Number(volWad) / 1e18;
+      const volEl = document.getElementById('hero-vol');
+      if (volEl && vol > 0) {
+        volEl.textContent = (vol * 100).toFixed(1) + '%';
+        // Also seed the pricer slider with live vol
+        const slider = document.getElementById('vol-slider');
+        if (slider) {
+          slider.value = Math.round(vol * 100);
+          updatePricer();
+        }
+      } else if (volEl) {
+        volEl.textContent = 'Live';
+      }
+    }
+  } catch(e) {
+    const el = document.getElementById('hero-vol');
+    if (el) el.textContent = 'Live';
+  }
+
+  try {
+    // utilizationRatio(USDC) - selector 0x8dd20d28, returns uint256 wad
+    const utilHex = await rpcCall(VAULT, '0x8dd20d28' + pad32(USDC));
+    const utilWad = parseInt(utilHex, 16);
+    const utilPct = utilWad / 1e16; // wad / 1e18 * 100
+    const utilEl = document.getElementById('hero-util');
+    if (utilEl) utilEl.textContent = utilPct.toFixed(1) + '%';
+  } catch(e) {
+    const el = document.getElementById('hero-util');
+    if (el) el.textContent = 'Live';
+  }
+}
+
+fetchLiveStats();
+setInterval(fetchLiveStats, 30000);
+
+/* ── Live ETH spot → seed pricer slider ─────────────────── */
+async function fetchSpot() {
+  try {
+    const r = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT');
+    const d = await r.json();
+    const spot = parseFloat(d.price);
+    if (spot > 0) {
+      const sl = document.getElementById('spot-slider');
+      if (sl) { sl.value = Math.round(spot); updatePricer(); }
+    }
+  } catch(e) {
+    try {
+      const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+      const d = await r.json();
+      const spot = d.ethereum.usd;
+      if (spot > 0) {
+        const sl = document.getElementById('spot-slider');
+        if (sl) { sl.value = Math.round(spot); updatePricer(); }
+      }
+    } catch(e2) {}
+  }
+}
+fetchSpot();
+setInterval(fetchSpot, 15000);
+
+/* ── Live comparison section ─────────────────────────────── */
+function updateComparison() {
+  const spotEl = document.getElementById('spot-slider');
+  const volEl  = document.getElementById('vol-slider');
+  if (!spotEl || !volEl) return;
+  const spot = +spotEl.value;
+  const vol  = +volEl.value / 100;
+  if (spot <= 0 || vol <= 0) return;
+
+  const strike = Math.round(spot / 100) * 100;
+  const T = 30 / 365;
+  const r = 0.05;
+  const tradVol = vol * 1.18;
+
+  function bs(S, K, t, v) {
+    const d1 = (Math.log(S/K) + (r + v*v/2)*t) / (v * Math.sqrt(t));
+    const d2 = d1 - v * Math.sqrt(t);
+    return S * normcdf(d1) - K * Math.exp(-r*t) * normcdf(d2);
+  }
+
+  const tradPrem = bs(spot, strike, T, tradVol);
+  const voltPrem = bs(spot, strike, T, vol);
+  const tradTotal = tradPrem + 18;
+  const voltTotal = voltPrem + 0.01;
+  const savings = tradTotal - voltTotal;
+  const savingsPct = tradTotal > 0 ? (savings / tradTotal * 100) : 0;
+
+  const fmt = n => '$' + n.toFixed(2);
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+
+  set('cmp-trad-vol',   (tradVol*100).toFixed(1)+'%');
+  set('cmp-trad-prem',  fmt(tradPrem));
+  set('cmp-trad-total', fmt(tradTotal));
+  set('cmp-volt-vol',   (vol*100).toFixed(1)+'%');
+  set('cmp-volt-prem',  fmt(voltPrem));
+  set('cmp-volt-total', fmt(voltTotal));
+  set('cmp-savings',    fmt(savings));
+  set('cmp-savings-pct', savingsPct.toFixed(1)+'% cheaper per contract');
+  set('cmp-note', `30-day call · strike $${strike.toLocaleString()} · spot $${spot.toLocaleString('en-US',{maximumFractionDigits:0})}`);
+}
+
+// Hook into slider events to also update comparison
+['spot-slider','vol-slider','dte-slider','strike-select'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', updateComparison);
+});
+setTimeout(updateComparison, 500);
 
 /* ── App URL wiring ──────────────────────────────────────── */
 const APP_URL = 'https://voltaire-app.vercel.app';

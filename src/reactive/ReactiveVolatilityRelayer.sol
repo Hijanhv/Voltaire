@@ -41,8 +41,8 @@ contract ReactiveVolatilityRelayer is IReactive {
 
     // ─── Destination: Unichain ────────────────────────────────────────────────
 
-    /// @dev Unichain mainnet chain ID
-    uint256 private constant UNICHAIN_CHAIN_ID = 130;
+    /// @dev Unichain chain ID (130 = mainnet, 1301 = Sepolia testnet)
+    uint256 public immutable unichainId;
 
     /// @dev Gas limit for updateVolatility() call on Unichain
     uint64 private constant CALLBACK_GAS = 200_000;
@@ -83,12 +83,18 @@ contract ReactiveVolatilityRelayer is IReactive {
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
-    constructor(address _volatilityOracle) {
-        volatilityOracle = _volatilityOracle;
-        owner = msg.sender;
+    receive() external payable {}
 
-        // Subscribe to Uniswap V3 Swap events on all 4 chains
-        // Any address (0) = any contract, but we filter to specific pools
+    constructor(address _volatilityOracle, uint256 _unichainId) payable {
+        volatilityOracle = _volatilityOracle;
+        unichainId = _unichainId;
+        owner = msg.sender;
+    }
+
+    /// @notice Subscribe to all source chain Swap events.
+    ///         Must be called after deployment (requires on-chain precompile at 0xfffFfF).
+    function subscribeAll() external {
+        require(msg.sender == owner, "only owner");
         ISubscriptionService(SUBSCRIPTION_SERVICE)
             .subscribe(CHAIN_ETHEREUM, ETH_USDC_ETHEREUM, UNISWAP_V3_SWAP_TOPIC, 0, 0, 0);
         ISubscriptionService(SUBSCRIPTION_SERVICE)
@@ -167,7 +173,7 @@ contract ReactiveVolatilityRelayer is IReactive {
 
         // Emit Callback — Reactive Network relays this as a call to Unichain
         emit Callback(
-            UNICHAIN_CHAIN_ID,
+            unichainId,
             volatilityOracle,
             CALLBACK_GAS,
             abi.encodeWithSignature(

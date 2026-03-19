@@ -24,6 +24,10 @@ remappings = [
   "@openzeppelin/=lib/openzeppelin-contracts/",
 ]
 
+[rpc_endpoints]
+unichain_sepolia = "https://sepolia.unichain.org"
+lasna            = "https://lasna-rpc.rnk.dev/"
+
 [fmt]
 line_length = 100
 tab_width = 4

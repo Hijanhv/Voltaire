@@ -29,9 +29,9 @@ contract ReactiveExpirySettler is IReactive {
 
     /// @dev SeriesCreated(uint256 indexed seriesId, address indexed optionToken,
     ///                    address underlying, uint256 strike, uint256 expiry, bool isCall)
+    // keccak256("SeriesCreated(uint256,address,address,uint256,uint256,bool)")
     uint256 private constant SERIES_CREATED_TOPIC =
-        0x6f76a8d8d3e3d5a5d6d5a5d6d5a5d6d5a5d6d5a5d6d5a5d6d5a5d6d5a5d6d5;
-    // Note: replace with keccak256("SeriesCreated(uint256,address,address,uint256,uint256,bool)")
+        0x951a4eed933835e79958d7f70f0655d994f796ed4601180cf93ab5d135c19397;
 
     /// @dev Uniswap V3 Swap on Ethereum for spot price reads
     uint256 private constant CHAIN_ETHEREUM = 1;
@@ -71,19 +71,23 @@ contract ReactiveExpirySettler is IReactive {
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
-    constructor(address _optionsHook, address _optionSeries, uint256 _unichainId) {
+    receive() external payable {}
+
+    constructor(address _optionsHook, address _optionSeries, uint256 _unichainId) payable {
         optionsHook = _optionsHook;
         optionSeries = _optionSeries;
         unichainId = _unichainId;
         owner = msg.sender;
+    }
 
+    /// @notice Subscribe to all source chain events.
+    ///         Must be called after deployment (requires on-chain precompile at 0xfffFfF).
+    function subscribeAll() external {
+        require(msg.sender == owner, "only owner");
         // Subscribe to SeriesCreated events from OptionSeries on Unichain
-        // This lets us track every new option series and its expiry
         ISubscriptionService(SUBSCRIPTION_SERVICE)
-            .subscribe(_unichainId, _optionSeries, SERIES_CREATED_TOPIC, 0, 0, 0);
-
+            .subscribe(unichainId, optionSeries, SERIES_CREATED_TOPIC, 0, 0, 0);
         // Subscribe to Uniswap V3 Swap on Ethereum for live spot price
-        // Used as settlement price at expiry
         ISubscriptionService(SUBSCRIPTION_SERVICE)
             .subscribe(CHAIN_ETHEREUM, ETH_USDC_ETHEREUM, UNISWAP_V3_SWAP_TOPIC, 0, 0, 0);
     }
