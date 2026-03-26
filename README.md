@@ -9,7 +9,7 @@
 [![Uniswap V4](https://img.shields.io/badge/Uniswap-V4%20Hook-ff007a)](https://docs.uniswap.org/contracts/v4/overview)
 [![Reactive Network](https://img.shields.io/badge/Reactive-Network-6366f1)](https://reactive.network)
 [![Foundry](https://img.shields.io/badge/Built%20with-Foundry-FFDB1C)](https://getfoundry.sh)
-[![Tests](https://img.shields.io/badge/Tests-112%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-108%20passing-brightgreen)]()
 [![Testnet](https://img.shields.io/badge/Deployed-Unichain%20Sepolia-8b5cf6)](https://sepolia.uniscan.xyz)
 [![Landing](https://img.shields.io/badge/Landing-voltaire--landing-black)](https://voltaire-landing-janhavi-chavadas-projects.vercel.app)
 [![App](https://img.shields.io/badge/App-voltaire--app-black)](https://voltaire-app-janhavi-chavadas-projects.vercel.app)
@@ -626,7 +626,7 @@ Risk: if many options expire in-the-money in the same period, vault NAV decrease
 |---|---|
 | Smart contracts deployed | 6 (4 on Unichain Sepolia + 2 RSCs on Lasna) |
 | Lines of Solidity | ~3,500 |
-| Test coverage | 112 tests, all passing |
+| Test coverage | 108 tests, all passing |
 | Chains feeding volatility | 4 (Ethereum, Arbitrum, Base, BSC) |
 | Volatility samples per day | 288 per chain · 1,152 total |
 | Max data staleness before revert | 1 hour |
@@ -682,17 +682,19 @@ uint256 p = mulDiv(pdf, poly, WAD);
 
 `OptionsHook` needs the address of `OptionSeries` at construction. `OptionSeries` needs the address of `OptionsHook` at construction. Neither can be deployed first.
 
-My solution: deploy `OptionSeries` with the deployer address as a temporary hook, deploy `OptionsHook` with the real series address, then redeploy `OptionSeries` with the real hook address, then redeploy `OptionsHook` with the final series address.
+My initial solution was a 4-step double-redeploy that worked but was messy. The clean solution: add a `setHook` admin function to both `OptionSeries` and `CollateralVault`, then use deployer as a temporary hook address and wire everything up after the fact.
 
 ```
+Deploy CollateralVault(deployer as temp hook)
 Deploy OptionSeries(deployer as temp hook)
-Deploy OptionsHook(real series address)
-Deploy OptionSeries_FINAL(real hook address)
-Deploy OptionsHook_FINAL(final series address)
-vault.setHook(hookFinal)
+Deploy OptionsHook(vault, series)        ← knows final addresses
+vault.setHook(hook)                      ← wire to real hook
+series.setHook(hook)                     ← wire to real hook
 ```
 
-**Lesson:** Circular dependencies in smart contracts require careful deployment ordering. Always plan the deployment sequence before writing any deploy script.
+This also resolved the same problem in tests — no more double-deploying inside `setUp()`.
+
+**Lesson:** Circular dependencies in smart contracts are best broken with a post-deploy `set*` pattern rather than repeated redeployments. Design for it upfront.
 
 ### 4. Uniswap V4 Hook Permissions are Encoded in the Address
 
@@ -706,7 +708,7 @@ BEFORE_SWAP_RETURNS_DELTA = bit 3 = 0b00001000
 Combined                 = 0b10001000 = 0x88
 ```
 
-In production, you must use `HookMiner` + `CREATE2` to find a deployment salt that produces an address with those bits. On testnet I bypassed this constraint — but it means the testnet hook can't be used with a real V4 pool until redeployed at the correct address.
+In production, you must use `HookMiner` + `CREATE2` to find a deployment salt that produces an address with those bits. `BaseHook` intentionally defers this check to `PoolManager.initialize` so that tests and scripts can use `new OptionsHook(...)` without address mining — but deploying to a real V4 pool still requires the correct address.
 
 **Lesson:** Read the Uniswap V4 hook documentation carefully before designing your deployment strategy.
 
@@ -793,7 +795,7 @@ If you're building something similar, here are the mistakes I hit so you don't h
 
 ### Hook Address Encoding (Testnet vs Production)
 
-Uniswap V4 encodes hook permissions in the deployed contract address. For Voltaire (`beforeSwap` + `beforeSwapReturnsDelta`), the address must end in `0x88`. On testnet this constraint is bypassed — for mainnet deployment, `HookMiner` + `CREATE2` must be used to mine the correct address.
+Uniswap V4 encodes hook permissions in the deployed contract address. For Voltaire (`beforeSwap` + `beforeSwapReturnsDelta`), the address must end in `0x88`. `BaseHook` defers this validation to `PoolManager.initialize` (which enforces it when a pool is actually created) — so unit tests and scripts work without CREATE2. For mainnet pool initialization, `HookMiner` + `CREATE2` must be used to mine a deployment salt that produces the correct address.
 
 ### Cost Basis Tracking
 
@@ -818,7 +820,8 @@ For call options, the vault locks `spot` as collateral per contract. The true ma
 
 | Contract | Purpose |
 |---|---|
-| `OptionsHook.sol` | Uniswap V4 hook: reads live spot via `StateLibrary.getSlot0`, applies 1.15× IV multiplier to oracle vol, prices via Black-Scholes, mints option tokens, settles at expiry |
+| `BaseHook.sol` | Abstract Uniswap V4 hook base: stores immutable `poolManager`, `onlyPoolManager` modifier, abstract `getHookPermissions()`, default stubs revert `HookNotImplemented` for disabled callbacks |
+| `OptionsHook.sol` | Extends `BaseHook`: reads live spot via `StateLibrary.getSlot0`, applies 1.15× IV multiplier to oracle vol, prices via Black-Scholes, mints option tokens, settles at expiry |
 | `BlackScholes.sol` | Pure library: full BS with `e^(-rT)` strike discounting (5% risk-free), normcdf, lnWad, expWad, all WAD fixed-point |
 | `VolatilityOracle.sol` | Cross-chain vol store: ring buffer of 48 observations, staleness revert after 1 hour |
 | `OptionSeries.sol` | Series registry: create, mint, burn, settle; deploys one ERC20 per series |
@@ -834,7 +837,7 @@ git clone https://github.com/Hijanhv/Voltaire
 cd Voltaire
 forge install
 forge build
-forge test -vv  # 112 tests
+forge test -vv  # 108 tests
 ```
 
 ### Deploy to Unichain Sepolia
@@ -852,7 +855,8 @@ forge script script/DeploySepolia.s.sol \
 ```
 voltaire/
 ├── src/
-│   ├── OptionsHook.sol          # Uniswap V4 hook — core protocol
+│   ├── BaseHook.sol             # Abstract V4 hook base (poolManager, onlyPoolManager, stubs)
+│   ├── OptionsHook.sol          # Extends BaseHook — core protocol
 │   ├── BlackScholes.sol         # Pure Solidity BS library
 │   ├── VolatilityOracle.sol     # Cross-chain vol store + staleness guard
 │   ├── OptionSeries.sol         # Series registry + ERC20 option tokens
