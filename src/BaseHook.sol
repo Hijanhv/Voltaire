@@ -94,12 +94,12 @@ abstract contract BaseHook is IHooks {
         revert HookNotImplemented();
     }
 
-    function beforeSwap(
-        address,
-        PoolKey calldata,
-        IPoolManager.SwapParams calldata,
-        bytes calldata
-    ) external virtual onlyPoolManager returns (bytes4, BeforeSwapDelta, uint24) {
+    function beforeSwap(address, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata)
+        external
+        virtual
+        onlyPoolManager
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
         revert HookNotImplemented();
     }
 
