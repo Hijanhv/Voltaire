@@ -17,6 +17,7 @@ import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import {BaseHook} from "./BaseHook.sol";
 import {BlackScholes} from "./BlackScholes.sol";
 import {VolatilityOracle} from "./VolatilityOracle.sol";
 import {OptionSeries} from "./OptionSeries.sol";
@@ -33,12 +34,11 @@ import {CollateralVault} from "./CollateralVault.sol";
 ///         5. At expiry, Reactive Network cron calls settleExpiredSeries()
 ///
 ///         MEV tax on Unichain: options arb captured via hook fees, improving protocol sustainability.
-contract OptionsHook is IHooks {
+contract OptionsHook is BaseHook {
     using SafeERC20 for IERC20;
     using CurrencyLibrary for Currency;
 
     // ─── Errors ───────────────────────────────────────────────────────────────
-    error OnlyPoolManager();
     error InsufficientVaultLiquidity();
     error SeriesAlreadySettled();
     error SeriesNotExpired();
@@ -72,7 +72,6 @@ contract OptionsHook is IHooks {
 
     // ─── Storage ──────────────────────────────────────────────────────────────
 
-    IPoolManager public immutable poolManager;
     VolatilityOracle public immutable volOracle;
     OptionSeries public immutable optionSeries;
     CollateralVault public immutable vault;
@@ -96,29 +95,46 @@ contract OptionsHook is IHooks {
         OptionSeries _optionSeries,
         CollateralVault _vault,
         address _reactiveCron
-    ) {
-        poolManager = _poolManager;
+    ) BaseHook(_poolManager) {
         volOracle = _volOracle;
         optionSeries = _optionSeries;
         vault = _vault;
         reactiveCron = _reactiveCron;
         owner = msg.sender;
-
-        // Validate hook flags match this contract's deployed address
-        // (In production this would use CREATE2 with correct salt)
     }
 
-    // ─── IHooks: beforeSwap ───────────────────────────────────────────────────
+    // ─── BaseHook: permissions ────────────────────────────────────────────────
 
-    /// @inheritdoc IHooks
+    /// @inheritdoc BaseHook
+    function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
+        return Hooks.Permissions({
+            beforeInitialize: false,
+            afterInitialize: false,
+            beforeAddLiquidity: false,
+            afterAddLiquidity: false,
+            beforeRemoveLiquidity: false,
+            afterRemoveLiquidity: false,
+            beforeSwap: true,
+            afterSwap: false,
+            beforeDonate: false,
+            afterDonate: false,
+            beforeSwapReturnDelta: true,
+            afterSwapReturnDelta: false,
+            afterAddLiquidityReturnDelta: false,
+            afterRemoveLiquidityReturnDelta: false
+        });
+    }
+
+    // ─── BaseHook: beforeSwap ─────────────────────────────────────────────────
+
+    /// @inheritdoc BaseHook
     /// @dev Intercepts swaps with hookData to sell options instead of AMM swaps.
     function beforeSwap(
         address sender,
         PoolKey calldata key,
         IPoolManager.SwapParams calldata, /* params */
         bytes calldata hookData
-    ) external override returns (bytes4, BeforeSwapDelta, uint24) {
-        if (msg.sender != address(poolManager)) revert OnlyPoolManager();
+    ) external override onlyPoolManager returns (bytes4, BeforeSwapDelta, uint24) {
         if (hookData.length == 0) {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
@@ -172,94 +188,6 @@ contract OptionsHook is IHooks {
 
         emit OptionPurchased(sender, seriesId, p.quantity, totalPremium, vol);
         emit PriceQuoted(seriesId, spot, vol, unitPremium);
-    }
-
-    // ─── IHooks: stubs ────────────────────────────────────────────────────────
-
-    function beforeInitialize(address, PoolKey calldata, uint160)
-        external
-        pure
-        override
-        returns (bytes4)
-    {
-        return IHooks.beforeInitialize.selector;
-    }
-
-    function afterInitialize(address, PoolKey calldata, uint160, int24)
-        external
-        pure
-        override
-        returns (bytes4)
-    {
-        return IHooks.afterInitialize.selector;
-    }
-
-    function beforeAddLiquidity(
-        address,
-        PoolKey calldata,
-        IPoolManager.ModifyLiquidityParams calldata,
-        bytes calldata
-    ) external pure override returns (bytes4) {
-        return IHooks.beforeAddLiquidity.selector;
-    }
-
-    function afterAddLiquidity(
-        address,
-        PoolKey calldata,
-        IPoolManager.ModifyLiquidityParams calldata,
-        BalanceDelta,
-        BalanceDelta,
-        bytes calldata
-    ) external pure override returns (bytes4, BalanceDelta) {
-        return (IHooks.afterAddLiquidity.selector, BalanceDelta.wrap(0));
-    }
-
-    function beforeRemoveLiquidity(
-        address,
-        PoolKey calldata,
-        IPoolManager.ModifyLiquidityParams calldata,
-        bytes calldata
-    ) external pure override returns (bytes4) {
-        return IHooks.beforeRemoveLiquidity.selector;
-    }
-
-    function afterRemoveLiquidity(
-        address,
-        PoolKey calldata,
-        IPoolManager.ModifyLiquidityParams calldata,
-        BalanceDelta,
-        BalanceDelta,
-        bytes calldata
-    ) external pure override returns (bytes4, BalanceDelta) {
-        return (IHooks.afterRemoveLiquidity.selector, BalanceDelta.wrap(0));
-    }
-
-    function afterSwap(
-        address,
-        PoolKey calldata,
-        IPoolManager.SwapParams calldata,
-        BalanceDelta,
-        bytes calldata
-    ) external pure override returns (bytes4, int128) {
-        return (IHooks.afterSwap.selector, 0);
-    }
-
-    function beforeDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)
-        external
-        pure
-        override
-        returns (bytes4)
-    {
-        return IHooks.beforeDonate.selector;
-    }
-
-    function afterDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)
-        external
-        pure
-        override
-        returns (bytes4)
-    {
-        return IHooks.afterDonate.selector;
     }
 
     // ─── Settlement (called by Reactive Network cron) ─────────────────────────
@@ -403,28 +331,5 @@ contract OptionsHook is IHooks {
         uint256 amount = protocolFees[token];
         protocolFees[token] = 0;
         IERC20(token).safeTransfer(to, amount);
-    }
-
-    /// @notice Hook address permission flags
-    /// @dev The hook must be deployed at an address where the lower bits encode these flags.
-    ///      Flag bits: BEFORE_SWAP (bit 7) | BEFORE_SWAP_RETURNS_DELTA (bit 3)
-    ///      = 0b10001000 = 0x88
-    function getHookPermissions() public pure returns (Hooks.Permissions memory) {
-        return Hooks.Permissions({
-            beforeInitialize: false,
-            afterInitialize: false,
-            beforeAddLiquidity: false,
-            afterAddLiquidity: false,
-            beforeRemoveLiquidity: false,
-            afterRemoveLiquidity: false,
-            beforeSwap: true,
-            afterSwap: false,
-            beforeDonate: false,
-            afterDonate: false,
-            beforeSwapReturnDelta: true,
-            afterSwapReturnDelta: false,
-            afterAddLiquidityReturnDelta: false,
-            afterRemoveLiquidityReturnDelta: false
-        });
     }
 }
