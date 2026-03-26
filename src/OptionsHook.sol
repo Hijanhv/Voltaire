@@ -6,7 +6,6 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
-import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {
     BeforeSwapDelta,
     toBeforeSwapDelta,
@@ -141,6 +140,10 @@ contract OptionsHook is BaseHook {
 
         uint256 totalPremium = _processOptionSwap(sender, key, hookData);
 
+        // Guard against truncation: int128 max ≈ 1.7 × 10^38 WAD.
+        // Any premium this large is economically impossible, so revert early.
+        if (totalPremium > uint256(uint128(type(int128).max))) revert PremiumTooHigh();
+        // forge-lint: disable-next-line(unsafe-typecast)
         BeforeSwapDelta delta = toBeforeSwapDelta(int128(int256(totalPremium)), 0);
         return (IHooks.beforeSwap.selector, delta, 0);
     }

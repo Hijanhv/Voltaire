@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 
 import {VolatilityOracle} from "../src/VolatilityOracle.sol";
 import {OptionSeries} from "../src/OptionSeries.sol";

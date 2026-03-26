@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {OptionSeries} from "../src/OptionSeries.sol";
-import {OptionToken} from "../src/OptionToken.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract OptionSeriesTest is Test {
