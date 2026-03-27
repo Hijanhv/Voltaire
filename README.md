@@ -225,6 +225,7 @@ The hook is like a plugin that runs **before every swap**, decides what to do, a
 ║  │                                                                 │  ║
 ║  │  settleExpiredSeries() ── called by Reactive cron               │  ║
 ║  │  claimSettlement()     ── called by option holders              │  ║
+║  │  protocolStats()       ── volume / open interest / series / IV  │  ║
 ║  └───────────────┬─────────────────────┬───────────────────────────┘  ║
 ║                  │                     │                              ║
 ║                  ▼                     ▼                              ║
@@ -742,7 +743,27 @@ uint256 idx = (historyHead + HISTORY_SIZE - 1 - i) % HISTORY_SIZE;
 
 **Lesson:** Ring buffer arithmetic always needs the modular addition trick to avoid underflow. Write the test for the empty buffer case first.
 
-### 7. Cross-Chain Architecture Requires Thinking in Async
+### 7. Use the Official Hook Base — Don't Roll Your Own
+
+My first `BaseHook` was a clean implementation that worked in tests. But it had one critical difference from Uniswap's official [`v4-hooks-public/BaseHook.sol`](https://github.com/Uniswap/v4-hooks-public/blob/main/src/base/BaseHook.sol): I used a flat pattern (`external beforeSwap` with `onlyPoolManager`) instead of the official double-dispatch (`external beforeSwap` → `internal _beforeSwap`).
+
+The official pattern is better for three reasons:
+1. Subclasses override the internal `_beforeSwap` — they physically cannot bypass the `onlyPoolManager` check
+2. `validateHookAddress` is `virtual`, so test subclasses can override it to skip address-bit validation without HookMiner
+3. Grant reviewers and auditors recognise the official pattern immediately — it signals you followed the ecosystem standard
+
+```
+// Official pattern (what we now use):
+//   external beforeSwap() [enforces onlyPoolManager]
+//   → internal _beforeSwap() [virtual — override in your hook]
+//
+// Test pattern: MockOptionsHook overrides validateHookAddress() with a no-op
+//   → allows deployment to any address without HookMiner
+```
+
+**Lesson:** When an authoritative open-source reference implementation exists, use it. The differences are subtle but meaningful for security and ecosystem compatibility.
+
+### 8. Cross-Chain Architecture Requires Thinking in Async
 
 In traditional programming, you call a function and get a result. In cross-chain systems, data flows asynchronously — Reactive Network pushes updates to the oracle, the oracle stores them, and the hook reads them later.
 
@@ -791,11 +812,24 @@ If you're building something similar, here are the mistakes I hit so you don't h
 
 ---
 
+## Security Review & Fixes
+
+A full internal security review was performed on all contracts. Findings and fixes:
+
+| Severity | Finding | Fix |
+|---|---|---|
+| **HIGH** | ITM excess collateral permanently locked — after settlement, `(maxPayout − intrinsic) × totalSupply` stayed in `utilizedAssets` forever, blocking LP withdrawals indefinitely | Added `CollateralVault.reduceSeriesLock()`. `settleExpiredSeries` now immediately frees the unused portion, leaving only the claimable amount locked |
+| **MEDIUM** | `setHook(address(0))` accepted — passing zero address would brick both `CollateralVault` and `OptionSeries` with no recovery path | Added zero-address guard to `setHook()` in both contracts |
+| **MEDIUM** | `CollateralVault` had no `transferOwnership` — owner key compromise = permanent admin loss | Added `transferOwnership` with zero-address guard |
+| **MEDIUM** | `claimSettlement` silently burned OTM option tokens for 0 payout — users pay gas to destroy tokens and receive nothing | Now reverts with `"OTM: no payout"` if intrinsic value is zero |
+
+---
+
 ## Known Limitations & What Would Be Better With More Time
 
 ### Hook Address Encoding (Testnet vs Production)
 
-Uniswap V4 encodes hook permissions in the deployed contract address. For Voltaire (`beforeSwap` + `beforeSwapReturnsDelta`), the address must end in `0x88`. `BaseHook` defers this validation to `PoolManager.initialize` (which enforces it when a pool is actually created) — so unit tests and scripts work without CREATE2. For mainnet pool initialization, `HookMiner` + `CREATE2` must be used to mine a deployment salt that produces the correct address.
+Uniswap V4 encodes hook permissions in the deployed contract address. For Voltaire (`beforeSwap` + `beforeSwapReturnsDelta`), the address must end in `0x88`. `BaseHook` follows the official Uniswap pattern: `validateHookAddress` is `virtual` and overridden to a no-op in `MockOptionsHook` for tests, allowing deployment to any address without HookMiner. For mainnet pool initialization, `HookMiner` + `CREATE2` must still be used to mine a salt that produces the correct address.
 
 ### Cost Basis Tracking
 
@@ -820,13 +854,13 @@ For call options, the vault locks `spot` as collateral per contract. The true ma
 
 | Contract | Purpose |
 |---|---|
-| `BaseHook.sol` | Abstract Uniswap V4 hook base: stores immutable `poolManager`, `onlyPoolManager` modifier, abstract `getHookPermissions()`, default stubs revert `HookNotImplemented` for disabled callbacks |
-| `OptionsHook.sol` | Extends `BaseHook`: reads live spot via `StateLibrary.getSlot0`, applies 1.15× IV multiplier to oracle vol, prices via Black-Scholes, mints option tokens, settles at expiry |
+| `BaseHook.sol` | Official Uniswap v4-hooks-public pattern: inherits `ImmutableState` (v4-periphery) for `poolManager` + `onlyPoolManager`; double-dispatch (`external beforeSwap` → `internal _beforeSwap`); `validateHookAddress` virtual so tests skip address-bit check without HookMiner |
+| `OptionsHook.sol` | Extends `BaseHook`: overrides `_beforeSwap`; reads live spot via `StateLibrary.getSlot0`; applies 1.15× IV multiplier; prices via Black-Scholes; mints option tokens; settles at expiry; `protocolStats()` returns volume, open interest, series count, live IV in one call |
 | `BlackScholes.sol` | Pure library: full BS with `e^(-rT)` strike discounting (5% risk-free), normcdf, lnWad, expWad, all WAD fixed-point |
 | `VolatilityOracle.sol` | Cross-chain vol store: ring buffer of 48 observations, staleness revert after 1 hour |
-| `OptionSeries.sol` | Series registry: create, mint, burn, settle; deploys one ERC20 per series |
+| `OptionSeries.sol` | Series registry: create, mint, burn, settle; deploys one ERC20 per series; zero-address guard on `setHook` |
 | `OptionToken.sol` | Minimal ERC20 per series (e.g. `ETH-3400-MAR26-C`) |
-| `CollateralVault.sol` | Share-based USDC vault: lock, receivePremium, paySettlement |
+| `CollateralVault.sol` | Share-based USDC vault: lock, `reduceSeriesLock` (frees excess ITM collateral), receivePremium, paySettlement; `transferOwnership` for key rotation |
 | `ReactiveVolatilityRelayer.sol` | RSC on Lasna: subscribes to V3 Swap events on 4 chains, aggregates realized vol, pushes to oracle |
 | `ReactiveExpirySettler.sol` | RSC on Lasna: tracks series expiries, swap-and-pop array for O(1) gas, emits settlement callbacks |
 
