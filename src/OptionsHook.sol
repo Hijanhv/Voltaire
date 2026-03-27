@@ -103,6 +103,15 @@ contract OptionsHook is BaseHook {
     /// @notice Accumulated protocol fees per token address, withdrawable by owner
     mapping(address => uint256) public protocolFees;
 
+    // ─── Protocol stats (for traction tracking) ───────────────────────────────
+
+    /// @notice Cumulative premium volume traded (WAD, in quote token terms)
+    uint256 public totalVolumeTraded;
+    /// @notice Current open interest: total option contracts outstanding (WAD)
+    uint256 public totalOpenInterest;
+    /// @notice Total option series ever created
+    uint256 public totalSeriesCreated;
+
     // ─── Constructor ──────────────────────────────────────────────────────────
 
     constructor(
@@ -217,6 +226,7 @@ contract OptionsHook is BaseHook {
             // New series: deploy a fresh ERC20 option token and register it
             (seriesId,) =
                 optionSeries.createSeries(underlying, quoteToken, p.strike, p.expiry, p.isCall);
+            totalSeriesCreated++;
         }
 
         // Lock collateral in the vault so writers can't withdraw while options are live
@@ -228,6 +238,10 @@ contract OptionsHook is BaseHook {
         // Route premium: protocol fee stays in hook, remainder goes to vault as yield for LPs
         protocolFees[quoteToken] += fee;
         vault.receivePremium(quoteToken, totalPremium - fee);
+
+        // Update protocol stats
+        totalVolumeTraded += totalPremium;
+        totalOpenInterest += p.quantity;
 
         emit OptionPurchased(sender, seriesId, p.quantity, totalPremium, vol);
         emit PriceQuoted(seriesId, spot, vol, unitPremium);
@@ -275,6 +289,23 @@ contract OptionsHook is BaseHook {
         uint256 totalSupply = IERC20(s.optionToken).totalSupply();
         uint256 totalPayout = (intrinsic * totalSupply) / 1e18;
 
+        // Bug fix: at purchase time we locked maxPayout (spot for calls, strike for puts) per contract.
+        // But actual payout is only intrinsic ≤ maxPayout. The excess is permanently unused collateral
+        // that would otherwise remain locked in utilizedAssets forever, blocking LP withdrawals.
+        // Free the excess immediately so LPs can access their non-committed capital.
+        uint256 maxPayoutPerContract = s.isCall ? spotPrice : s.strike;
+        uint256 totalLocked = (maxPayoutPerContract * totalSupply) / 1e18;
+        if (totalLocked > totalPayout) {
+            vault.reduceSeriesLock(seriesId, s.quoteAsset, totalLocked - totalPayout);
+        }
+
+        // Reduce open interest by the settled supply
+        if (totalOpenInterest >= totalSupply) {
+            totalOpenInterest -= totalSupply;
+        } else {
+            totalOpenInterest = 0;
+        }
+
         emit SeriesSettled(seriesId, spotPrice, true, totalPayout);
     }
 
@@ -295,6 +326,9 @@ contract OptionsHook is BaseHook {
             intrinsic = s.strike - s.settlementPrice;
         }
 
+        // OTM options have zero intrinsic value — no point burning tokens for nothing
+        require(intrinsic > 0, "OTM: no payout");
+
         uint256 payout = (intrinsic * balance) / 1e18;
 
         // Burn first, then pay — prevents double-claim (checks-effects-interactions)
@@ -302,6 +336,30 @@ contract OptionsHook is BaseHook {
 
         if (payout > 0) {
             vault.paySettlement(s.quoteAsset, msg.sender, payout, seriesId);
+        }
+    }
+
+    // ─── View: protocol stats ─────────────────────────────────────────────────
+
+    /// @notice Returns key protocol metrics in one call.
+    ///         Useful for dashboards and grant traction demonstrations.
+    /// @return volume       Cumulative premium volume traded (WAD)
+    /// @return openInterest Current outstanding option contracts (WAD)
+    /// @return seriesCount  Total unique series ever opened
+    /// @return currentVol   Latest implied volatility (oracle vol × 1.15x multiplier)
+    function protocolStats()
+        external
+        view
+        returns (uint256 volume, uint256 openInterest, uint256 seriesCount, uint256 currentVol)
+    {
+        volume = totalVolumeTraded;
+        openInterest = totalOpenInterest;
+        seriesCount = totalSeriesCreated;
+        // Return 0 if oracle is stale rather than reverting
+        try volOracle.getVolatility() returns (uint256 vol) {
+            currentVol = (vol * IV_MULT_BPS) / 10_000;
+        } catch {
+            currentVol = 0;
         }
     }
 

@@ -183,10 +183,30 @@ contract CollateralVault {
         return v.totalAssets > v.utilizedAssets ? v.totalAssets - v.utilizedAssets : 0;
     }
 
+    /// @notice Reduce the lock for a series by a specific amount (used when excess collateral
+    ///         is freed after ITM settlement — actual claim needs are less than max locked).
+    function reduceSeriesLock(uint256 seriesId, address token, uint256 amount) external onlyHook {
+        uint256 locked = seriesLock[seriesId][token];
+        uint256 deduct = amount < locked ? amount : locked;
+        if (deduct == 0) return;
+        vaultState[token].utilizedAssets -= deduct;
+        seriesLock[seriesId][token] -= deduct;
+        emit UtilizationUpdated(
+            token, vaultState[token].utilizedAssets, vaultState[token].totalAssets
+        );
+    }
+
     // ─── Admin ────────────────────────────────────────────────────────────────
 
     function setHook(address _hook) external {
         require(msg.sender == owner, "only owner");
+        require(_hook != address(0), "zero address");
         hook = _hook;
+    }
+
+    function transferOwnership(address _newOwner) external {
+        require(msg.sender == owner, "only owner");
+        require(_newOwner != address(0), "zero address");
+        owner = _newOwner;
     }
 }

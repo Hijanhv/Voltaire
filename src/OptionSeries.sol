@@ -56,6 +56,7 @@ contract OptionSeries {
 
     function setHook(address _hook) external {
         require(msg.sender == owner, "only owner");
+        require(_hook != address(0), "zero address");
         hook = _hook;
     }
 
