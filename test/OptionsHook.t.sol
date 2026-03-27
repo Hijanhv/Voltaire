@@ -11,6 +11,7 @@ import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ImmutableState} from "@uniswap/v4-periphery/src/base/ImmutableState.sol";
 
 import {OptionsHook} from "../src/OptionsHook.sol";
 import {BaseHook} from "../src/BaseHook.sol";
@@ -27,9 +28,26 @@ contract TestToken is ERC20 {
     }
 }
 
+/// @dev Test subclass that skips hook address-bit validation.
+///      The official BaseHook validates that the deployed address encodes the correct permission bits
+///      (V4 requirement). In tests we deploy to arbitrary addresses, so we override
+///      validateHookAddress() with a no-op. Production deployments use HookMiner + CREATE2.
+contract MockOptionsHook is OptionsHook {
+    constructor(
+        IPoolManager _poolManager,
+        VolatilityOracle _volOracle,
+        OptionSeries _optionSeries,
+        CollateralVault _vault,
+        address _reactiveCron
+    ) OptionsHook(_poolManager, _volOracle, _optionSeries, _vault, _reactiveCron) {}
+
+    /// @dev Override to skip Hooks.validateHookPermissions during tests
+    function validateHookAddress(BaseHook) internal pure override {}
+}
+
 contract OptionsHookTest is Test {
     PoolManager poolManager;
-    OptionsHook hook;
+    MockOptionsHook hook;
     VolatilityOracle volOracle;
     OptionSeries optionSeries;
     CollateralVault vault;
@@ -54,17 +72,21 @@ contract OptionsHookTest is Test {
 
         weth = new TestToken("Wrapped Ether", "WETH");
         usdc = new TestToken("USD Coin", "USDC");
+        // V4 requires currency0 < currency1 by address sort order
         (address token0, address token1) = address(weth) < address(usdc)
             ? (address(weth), address(usdc))
             : (address(usdc), address(weth));
 
         volOracle = new VolatilityOracle(relayer);
 
-        // Deploy vault and series with deployer as temporary hook, then wire properly.
+        // Two-step wiring: deploy vault/series with deployer as temp hook,
+        // then deploy hook, then wire setHook() on both.
+        // Required because OptionsHook needs vault/series addresses at construction,
+        // and vault/series need the hook address for access control.
         vault = new CollateralVault(deployer);
         optionSeries = new OptionSeries(deployer);
 
-        hook = new OptionsHook(
+        hook = new MockOptionsHook(
             IPoolManager(address(poolManager)), volOracle, optionSeries, vault, reactiveCron
         );
 
@@ -81,9 +103,11 @@ contract OptionsHookTest is Test {
 
         vm.stopPrank();
 
+        // Seed volatility oracle with 70% realized vol
         vm.prank(relayer);
         volOracle.updateVolatility(0.7e18, 0xF, 288);
 
+        // LP deposits 1M USDC as collateral backing for option writers
         usdc.mint(lpProvider, LARGE_COLLATERAL);
         vm.startPrank(lpProvider);
         usdc.approve(address(vault), LARGE_COLLATERAL);
@@ -135,8 +159,9 @@ contract OptionsHookTest is Test {
             zeroForOne: true, amountSpecified: -1 ether, sqrtPriceLimitX96: 0
         });
 
+        // NotPoolManager is defined in ImmutableState (v4-periphery), inherited by BaseHook
         vm.prank(trader);
-        vm.expectRevert(BaseHook.NotPoolManager.selector);
+        vm.expectRevert(ImmutableState.NotPoolManager.selector);
         hook.beforeSwap(trader, poolKey, params, "");
     }
 
@@ -192,7 +217,7 @@ contract OptionsHookTest is Test {
         assertGt(putPremium, 0, "put premium > 0");
     }
 
-    function test_quote_expired_option_returns_intrinsic() public {
+    function test_quote_expired_option_returns_intrinsic() public view {
         uint256 strike = 3200e18;
         (uint256 unitPremium,,) = hook.quotePremium(poolKey, strike, block.timestamp - 1, true, WAD);
         assertEq(unitPremium, 0, "expired ATM call has 0 intrinsic");
@@ -226,9 +251,10 @@ contract OptionsHookTest is Test {
     }
 
     function test_settle_reverts_not_expired() public {
+        // Use fresh contracts with address(this) as the hook so we can call createSeries directly
         OptionSeries ourSeries = new OptionSeries(address(this));
         CollateralVault ourVault = new CollateralVault(address(this));
-        OptionsHook ourHook = new OptionsHook(
+        MockOptionsHook ourHook = new MockOptionsHook(
             IPoolManager(address(poolManager)), volOracle, ourSeries, ourVault, reactiveCron
         );
         ourVault.setHook(address(ourHook));
@@ -247,7 +273,7 @@ contract OptionsHookTest is Test {
     function test_claim_settlement_reverts_not_settled() public {
         OptionSeries ourSeries = new OptionSeries(address(this));
         CollateralVault ourVault = new CollateralVault(address(this));
-        OptionsHook ourHook = new OptionsHook(
+        MockOptionsHook ourHook = new MockOptionsHook(
             IPoolManager(address(poolManager)), volOracle, ourSeries, ourVault, reactiveCron
         );
         ourVault.setHook(address(ourHook));
@@ -324,7 +350,7 @@ contract OptionsHookTest is Test {
         });
 
         vm.prank(trader);
-        vm.expectRevert(BaseHook.NotPoolManager.selector);
+        vm.expectRevert(ImmutableState.NotPoolManager.selector);
         hook.beforeSwap(trader, poolKey, params, data);
     }
 
@@ -357,7 +383,7 @@ contract OptionsHookTest is Test {
     }
 
     function test_before_swap_insufficient_vault_liquidity_reverts() public {
-        // Drain vault by locking all collateral
+        // Drain vault by locking all collateral as if hook were calling
         vm.prank(deployer);
         vault.setHook(address(this));
         (, uint256 totalAssets,) = vault.vaultState(address(usdc));
