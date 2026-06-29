@@ -13,10 +13,23 @@
 [![Testnet](https://img.shields.io/badge/Deployed-Unichain%20Sepolia-8b5cf6)](https://sepolia.uniscan.xyz)
 [![Landing](https://img.shields.io/badge/Landing-voltaire--landing-black)](https://voltaire-landing-janhavi-chavadas-projects.vercel.app)
 [![App](https://img.shields.io/badge/App-voltaire--app-black)](https://voltaire-app-janhavi-chavadas-projects.vercel.app)
+[![UHI8 Winner](https://img.shields.io/badge/UHI8%20Winner-Asset--Class%20Specific%20Liquidity-FFD700)](#-uhi8-prize-winner)
 
 [What is This?](#what-is-voltaire) · [The Problem](#the-problem) · [How It Works](#how-it-works) · [Live Contracts](#live-on-testnet) · [What I Learned](#what-i-learned-building-this)
 
 **Live:** [voltaire-landing-janhavi-chavadas-projects.vercel.app](https://voltaire-landing-janhavi-chavadas-projects.vercel.app) · [voltaire-app-janhavi-chavadas-projects.vercel.app](https://voltaire-app-janhavi-chavadas-projects.vercel.app)
+
+</div>
+
+---
+
+## 🏆 UHI8 Prize Winner
+
+**Voltaire won a prize in the [UHI8 Hookathon](https://atrium.academy), in the _Asset-Class Specific Liquidity_ theme sponsored by [Uniswap](https://www.uniswapfoundation.org/).** Announced by Atrium Academy at the Uniswap Hook Incubator.
+
+<div align="center">
+
+<img src="docs/uhi8-prize.png" alt="Atrium Academy announcement: Voltaire wins the Uniswap-sponsored Asset-Class Specific Liquidity theme prize at the UHI8 Hookathon" width="440">
 
 </div>
 
